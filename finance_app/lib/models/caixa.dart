@@ -29,6 +29,8 @@ class Caixa {
   final int? id;
   @JsonKey(name: 'id_loja')
   final int idLoja;
+  @JsonKey(name: 'nome_loja')
+  final String? nomeLoja;
   @JsonKey(name: 'id_caixa')
   final int? idCaixa;
   @JsonKey(name: 'id_usuario')
@@ -67,6 +69,7 @@ class Caixa {
   Caixa({
     this.id,
     required this.idLoja,
+    this.nomeLoja,
     this.idCaixa,
     required this.idUsuario,
     this.idRefRepeticao,
@@ -94,6 +97,7 @@ class Caixa {
       return Caixa(
         id: _safeCast<int>(json['id']),
         idLoja: _safeCast<int>(json['id_loja']) ?? 0, // Campo obrigatório
+        nomeLoja: json['nome_loja'] as String?,
         idCaixa: _safeCast<int>(json['id_caixa']),
         idUsuario: _safeCast<int>(json['id_usuario']) ?? 0, // Campo obrigatório
         idRefRepeticao: _safeCast<int>(json['id_ref_repeticao']),

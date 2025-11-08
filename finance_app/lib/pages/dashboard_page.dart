@@ -1,12 +1,72 @@
+import 'package:finance_app/models/caixa.dart';
+import 'package:finance_app/models/relatorio_mensal.dart';
+import 'package:finance_app/models/relatorio_semanal.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
+import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  Caixa? _caixa;
+  RelatorioSemanal? _relatorioSemanal;
+  List<RelatorioMensal> _relatoriosMensais = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final apiService = ApiService();
+      final caixa = await apiService.getCaixa();
+      final relatoriosSemana = await apiService.getRelatorioSemanal();
+      final relatoriosMensais = await apiService.getRelatorioMensal(
+        DateTime.now().year,
+      );
+
+      // Busca o relatório do dia da semana atual
+      final diaSemana = DateTime.now().weekday; // 1 = Segunda, 7 = Domingo
+      RelatorioSemanal? relatorioSemanal;
+
+      if (relatoriosSemana.isNotEmpty) {
+        relatorioSemanal = relatoriosSemana.firstWhere(
+          (r) => r.diaSemana == diaSemana,
+          orElse: () => relatoriosSemana.first,
+        );
+      }
+
+      setState(() {
+        _caixa = caixa;
+        _relatorioSemanal = relatorioSemanal;
+        _relatoriosMensais = relatoriosMensais;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +75,14 @@ class DashboardPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.store, size: 24),
+            const SizedBox(width: 8),
+            Text(_caixa?.nomeLoja ?? 'Dashboard'),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(
@@ -31,108 +98,432 @@ class DashboardPage extends StatelessWidget {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          bool isDesktop = constraints.maxWidth > 600;
-          return Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Wrap(
-                spacing: 16.0,
-                runSpacing: 16.0,
-                alignment: WrapAlignment.center,
-                children: [
-                  _buildDashboardCard(
-                    context,
-                    'Último Caixa',
-                    Icons.point_of_sale,
-                    '/caixa/ultimo',
-                    isDesktop,
-                  ), // Rota ainda não implementada
-                  _buildDashboardCard(
-                    context,
-                    'Lista de Caixas',
-                    Icons.view_list,
-                    '/caixas',
-                    isDesktop,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+              ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.red,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Erro ao carregar dados:\n$_error',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _loadData,
+                      child: const Text('Tentar novamente'),
+                    ),
+                  ],
+                ),
+              )
+              : RefreshIndicator(
+                onRefresh: _loadData,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      _buildMainCard(context),
+                      const SizedBox(height: 16),
+                      _buildActionCardsRow(context),
+                      const SizedBox(height: 16),
+                      MonthlyChartsWidget(relatorios: _relatoriosMensais),
+                    ],
                   ),
-                  _buildDashboardCard(
-                    context,
-                    'Receitas',
-                    Icons.arrow_upward,
-                    '/receitas',
-                    isDesktop,
-                  ),
-                  _buildDashboardCard(
-                    context,
-                    'Despesas',
-                    Icons.arrow_downward,
-                    '/despesas',
-                    isDesktop,
-                  ),
-                ],
+                ),
               ),
+    );
+  }
+
+  Widget _buildMainCard(BuildContext context) {
+    final caixa = _caixa;
+    if (caixa == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text('Nenhum caixa disponível'),
+        ),
+      );
+    }
+
+    final dataFechamento = caixa.dataFechamento ?? DateTime.now();
+    final statusAberto = caixa.statusCaixa == 0;
+    final saldo = caixa.saldo ?? 0.0;
+    final pedidosConfirmados = caixa.totalPedidoConfirmado ?? 0;
+    final pedidosEstornados = caixa.totalPedidoEstornado ?? 0;
+
+    // Dados do relatório semanal para comparação
+    final relatorio = _relatorioSemanal;
+    final mediaSaldo = relatorio?.mediaSaldo ?? 0.0;
+    final recordSaldo = relatorio?.recordSaldo ?? 0.0;
+    final mediaPedidos = relatorio?.mediaPedidosConfirmados ?? 0.0;
+    final recordPedidos = relatorio?.recordPedidosConfirmados ?? 0;
+
+    return Card(
+      elevation: 4.0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cabeçalho com data e status
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${dataFechamento.day.toString().padLeft(2, '0')}/${dataFechamento.month.toString().padLeft(2, '0')}',
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      _getDiaSemana(dataFechamento.weekday),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CaixaPage(caixa: caixa),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Detalhes'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        statusAberto
+                            ? Colors.green.withOpacity(0.2)
+                            : Colors.red.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        statusAberto ? Icons.check_circle : Icons.lock,
+                        color: statusAberto ? Colors.green : Colors.red,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        statusAberto ? 'Aberto' : 'Fechado',
+                        style: TextStyle(
+                          color: statusAberto ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          );
-        },
+            const SizedBox(height: 24),
+
+            // Cards internos com informações
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInfoCard(
+                    context,
+                    'Saldo',
+                    'R\$ ${saldo.toStringAsFixed(2)}',
+                    mediaSaldo,
+                    recordSaldo,
+                    saldo,
+                    null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildInfoCard(
+                    context,
+                    'Pedidos',
+                    pedidosConfirmados.toString(),
+                    mediaPedidos,
+                    recordPedidos.toDouble(),
+                    pedidosConfirmados.toDouble(),
+                    pedidosEstornados,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildDashboardCard(
+  Widget _buildInfoCard(
     BuildContext context,
-    String title,
+    String label,
+    String value,
+    double media,
+    double record,
+    double currentValue,
+    int? estornados,
+  ) {
+    // Calcula percentuais
+    final percentMedia =
+        media > 0 ? ((currentValue - media) / media * 100) : 0.0;
+    final percentRecord =
+        record > 0 ? ((currentValue - record) / record * 100) : 0.0;
+
+    final isMediaPositive = percentMedia >= 0;
+    final isRecordPositive = percentRecord >= 0;
+    final isBeatRecord = currentValue >= record && record > 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border:
+            isBeatRecord
+                ? Border.all(color: Colors.amber.withOpacity(0.5), width: 2)
+                : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+              ),
+              if (isBeatRecord)
+                Icon(Icons.emoji_events, color: Colors.amber, size: 24),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                value,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (estornados != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.cancel,
+                        color: Colors.orange.shade700,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        estornados.toString(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'estornados',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Comparação com média
+          Row(
+            children: [
+              Icon(
+                isMediaPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                color: isMediaPositive ? Colors.green : Colors.red,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  '${percentMedia.abs().toStringAsFixed(0)}% ${isMediaPositive ? "acima da" : "abaixo da"} média',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isMediaPositive ? Colors.green : Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // Comparação com record
+          Row(
+            children: [
+              Icon(
+                isRecordPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                color: isRecordPositive ? Colors.green : Colors.red,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  '${percentRecord.abs().toStringAsFixed(0)}% ${isRecordPositive ? "acima do" : "abaixo do"} record',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isRecordPositive ? Colors.green : Colors.red,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionCardsRow(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _buildActionCard(
+            context,
+            Icons.view_list,
+            '/caixas',
+            isDark ? theme.primaryColor : theme.primaryColor,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildActionCard(
+            context,
+            Icons.arrow_upward,
+            '/receitas',
+            isDark ? Colors.green[300]! : Colors.green[600]!,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildActionCard(
+            context,
+            Icons.arrow_downward,
+            '/despesas',
+            isDark ? Colors.red[300]! : Colors.red[600]!,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard(
+    BuildContext context,
     IconData icon,
     String route,
-    bool isDesktop,
+    Color color,
   ) {
-    return SizedBox(
-      width: isDesktop ? 250 : double.infinity,
-      height: 150,
-      child: Card(
-        elevation: 4.0,
-        child: InkWell(
-          onTap: () async {
-            if (route != '/caixa/ultimo') {
-              Navigator.pushNamed(context, route);
-            } else {
-              try {
-                // Mostra um indicador de carregamento
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Buscando último caixa...')),
-                );
-                final caixa = await ApiService().getCaixa();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => CaixaPage(caixa: caixa),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Erro ao buscar último caixa: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            }
-          },
+    // Define label based on route
+    String label = '';
+    if (route == '/caixas') {
+      label = 'Caixas';
+    } else if (route == '/receitas') {
+      label = 'Receitas';
+    } else if (route == '/despesas') {
+      label = 'Despesas';
+    }
+
+    return Card(
+      elevation: 4.0,
+      color: color,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, route),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 80,
+          alignment: Alignment.center,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 48.0, color: Theme.of(context).primaryColor),
-              const SizedBox(height: 16.0),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              Icon(icon, size: 32, color: Colors.white),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _getDiaSemana(int weekday) {
+    const dias = [
+      'Segunda-feira',
+      'Terça-feira',
+      'Quarta-feira',
+      'Quinta-feira',
+      'Sexta-feira',
+      'Sábado',
+      'Domingo',
+    ];
+    return dias[weekday - 1];
   }
 }

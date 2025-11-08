@@ -29,7 +29,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   void initState() {
     super.initState();
     if (widget.fluxo != null) {
-      _descricaoController.text = widget.fluxo!.descricao;
+      _descricaoController.text = widget.fluxo!.descricao!;
       _valorController.text = widget.fluxo!.valor.toString();
     }
   }

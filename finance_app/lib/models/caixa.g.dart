@@ -9,6 +9,7 @@ part of 'caixa.dart';
 Caixa _$CaixaFromJson(Map<String, dynamic> json) => Caixa(
   id: (json['id'] as num?)?.toInt(),
   idLoja: (json['id_loja'] as num).toInt(),
+  nomeLoja: json['nome_loja'] as String?,
   idCaixa: (json['id_caixa'] as num?)?.toInt(),
   idUsuario: (json['id_usuario'] as num).toInt(),
   idRefRepeticao: (json['id_ref_repeticao'] as num?)?.toInt(),
@@ -39,6 +40,7 @@ Caixa _$CaixaFromJson(Map<String, dynamic> json) => Caixa(
 Map<String, dynamic> _$CaixaToJson(Caixa instance) => <String, dynamic>{
   'id': instance.id,
   'id_loja': instance.idLoja,
+  'nome_loja': instance.nomeLoja,
   'id_caixa': instance.idCaixa,
   'id_usuario': instance.idUsuario,
   'id_ref_repeticao': instance.idRefRepeticao,

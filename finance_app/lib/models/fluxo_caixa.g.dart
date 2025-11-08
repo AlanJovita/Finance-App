@@ -8,11 +8,11 @@ part of 'fluxo_caixa.dart';
 
 FluxoCaixa _$FluxoCaixaFromJson(Map<String, dynamic> json) => FluxoCaixa(
   id: (json['id'] as num?)?.toInt(),
-  idLoja: (json['id_loja'] as num).toInt(),
-  idCategoria: (json['id_categoria'] as num).toInt(),
-  descricao: json['descricao'] as String,
-  valor: (json['valor'] as num).toDouble(),
-  tipoFluxo: json['tipo_fluxo'] as String,
+  idLoja: (json['id_loja'] as num?)?.toInt(),
+  idCategoria: (json['id_categoria'] as num?)?.toInt(),
+  descricao: json['descricao'] as String?,
+  valor: (json['valor'] as num?)?.toDouble(),
+  tipoFluxo: json['tipo_fluxo'] as String?,
   cancelado: json['cancelado'] as bool?,
   confirmado: json['confirmado'] as bool?,
   dataCriacao:

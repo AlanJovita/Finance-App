@@ -71,8 +71,10 @@ class _DespesasPageState extends State<DespesasPage> {
             itemBuilder: (context, index) {
               final despesa = despesas[index];
               return ListTile(
-                title: Text(despesa.descricao),
-                subtitle: Text('R\$ ${despesa.valor.toStringAsFixed(2)}'),
+                title: Text(despesa.descricao ?? 'Sem descrição'),
+                subtitle: Text(
+                  'R\$ ${despesa.valor?.toStringAsFixed(2) ?? '0.00'}',
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -5,7 +5,6 @@ import '../services/api_service.dart';
 
 class ReceitasPage extends StatefulWidget {
   const ReceitasPage({super.key});
-
   @override
   State<ReceitasPage> createState() => _ReceitasPageState();
 }
@@ -22,7 +21,7 @@ class _ReceitasPageState extends State<ReceitasPage> {
 
   void _loadReceitas() {
     setState(() {
-      _receitasFuture = _apiService.listFluxos("tipo_fluxo='receita'");
+      _receitasFuture = _apiService.listFluxos("tipo_fluxo=1");
     });
   }
 
@@ -71,8 +70,10 @@ class _ReceitasPageState extends State<ReceitasPage> {
             itemBuilder: (context, index) {
               final receita = receitas[index];
               return ListTile(
-                title: Text(receita.descricao),
-                subtitle: Text('R\$ ${receita.valor.toStringAsFixed(2)}'),
+                title: Text(receita.descricao ?? 'Sem descrição'),
+                subtitle: Text(
+                  'R\$ ${receita.valor?.toStringAsFixed(2) ?? '0.00'}',
+                ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [

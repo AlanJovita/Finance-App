@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import '../models/fluxo_caixa.dart';
 import '../models/categoria.dart';
 import '../models/caixa.dart';
+import '../models/relatorio_mensal.dart';
+import '../models/relatorio_semanal.dart';
 import 'global_state.dart';
 
 class ApiService {
@@ -152,6 +154,22 @@ class ApiService {
     }
   }
 
+  Future<List<Caixa>> getCaixas() async {
+    final idLoja = GlobalState().firstIdLoja;
+    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+
+    final response = await _handleRequest(
+      () => http.get(Uri.parse('$_baseUrl/caixas/$idLoja')),
+    );
+
+    if (response['success'] == true) {
+      final List<dynamic> list = response['data'];
+      return list.map((item) => Caixa.fromJson(item)).toList();
+    } else {
+      throw Exception(response['msg'] ?? 'Erro ao buscar lista de caixas.');
+    }
+  }
+
   Future<Map<String, dynamic>> updateCaixa(Caixa caixa) async {
     final idLoja = GlobalState().firstIdLoja;
     if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
@@ -167,6 +185,40 @@ class ApiService {
       return response;
     } else {
       throw Exception(response['msg'] ?? 'Erro ao atualizar caixa.');
+    }
+  }
+
+  // Relatório Mensal
+  Future<List<RelatorioMensal>> getRelatorioMensal(int ano) async {
+    final idLoja = GlobalState().firstIdLoja;
+    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+
+    final response = await _handleRequest(
+      () => http.get(Uri.parse('$_baseUrl/caixa/mensal/$idLoja/$ano')),
+    );
+
+    if (response['success'] == true) {
+      final List<dynamic> list = response['data'];
+      return list.map((item) => RelatorioMensal.fromJson(item)).toList();
+    } else {
+      throw Exception(response['msg'] ?? 'Erro ao buscar relatório mensal.');
+    }
+  }
+
+  // Relatório Semanal
+  Future<List<RelatorioSemanal>> getRelatorioSemanal() async {
+    final idLoja = GlobalState().firstIdLoja;
+    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+
+    final response = await _handleRequest(
+      () => http.get(Uri.parse('$_baseUrl/caixa/semanal/$idLoja')),
+    );
+
+    if (response['success'] == true) {
+      final List<dynamic> list = response['data'];
+      return list.map((item) => RelatorioSemanal.fromJson(item)).toList();
+    } else {
+      throw Exception(response['msg'] ?? 'Erro ao buscar relatório semanal.');
     }
   }
 
