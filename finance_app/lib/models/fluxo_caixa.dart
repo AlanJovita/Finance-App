@@ -81,14 +81,8 @@ class FluxoCaixa {
         tipoFluxo: _safeString(json['tipo_fluxo']),
         cancelado: json['cancelado'] as bool?,
         confirmado: json['confirmado'] as bool?,
-        dataCriacao:
-            json['data_criacao'] != null
-                ? DateTime.tryParse(json['data_criacao'].toString())
-                : null,
-        dataVencimento:
-            json['data_vencimento'] != null
-                ? DateTime.tryParse(json['data_vencimento'].toString())
-                : null,
+        dataCriacao: _parseCustomDate(json['data_criacao']),
+        dataVencimento: _parseCustomDate(json['data_vencimento']),
         diaVencimento: _safeCast<int>(json['dia_vencimento']),
         repeticao: _safeString(json['repeticao']),
         idRef: _safeCast<int>(json['id_ref']),
@@ -98,6 +92,36 @@ class FluxoCaixa {
       print('JSON recebido: $json');
       rethrow;
     }
+  }
+
+  /// Converte datas no formato "d/M/yyyy" ou "--:--" para DateTime
+  static DateTime? _parseCustomDate(dynamic value) {
+    if (value == null) return null;
+    final dateStr = value.toString().trim();
+
+    // Verifica se é um formato inválido
+    if (dateStr.isEmpty || dateStr == '--:--' || dateStr == '--') {
+      return null;
+    }
+
+    // Tenta o parse padrão primeiro
+    var date = DateTime.tryParse(dateStr);
+    if (date != null) return date;
+
+    // Tenta fazer parse do formato "d/M/yyyy" ou "dd/MM/yyyy"
+    try {
+      final parts = dateStr.split('/');
+      if (parts.length == 3) {
+        final day = int.parse(parts[0]);
+        final month = int.parse(parts[1]);
+        final year = int.parse(parts[2]);
+        return DateTime(year, month, day);
+      }
+    } catch (e) {
+      print('Erro ao fazer parse da data: $dateStr - $e');
+    }
+
+    return null;
   }
 
   Map<String, dynamic> toJson() => _$FluxoCaixaToJson(this);

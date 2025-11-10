@@ -1,3 +1,4 @@
+import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/relatorio_mensal.dart';
@@ -112,8 +113,8 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                                   TextSpan(
                                     text:
                                         isMedia
-                                            ? 'Média: R\$ ${spot.y.toStringAsFixed(2)}'
-                                            : 'Soma: R\$ ${spot.y.toStringAsFixed(2)}',
+                                            ? 'Média: ${CurrencyFormatter.format(spot.y)}'
+                                            : 'Soma: ${CurrencyFormatter.format(spot.y)}',
                                     style: TextStyle(
                                       color: spot.bar.color,
                                       fontWeight: FontWeight.w500,
@@ -154,7 +155,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                             reservedSize: 50,
                             getTitlesWidget: (value, meta) {
                               return Text(
-                                'R\$ ${(value / 1000).toStringAsFixed(0)}k',
+                                'R\$ ${CurrencyFormatter.formatSimple(value / 1000, decimals: 0)}k',
                                 style: theme.textTheme.bodySmall,
                               );
                             },
@@ -269,7 +270,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                                 children: [
                                   TextSpan(
                                     text:
-                                        '$label: ${spot.y.toStringAsFixed(0)}',
+                                        '$label: ${CurrencyFormatter.formatSimple(spot.y, decimals: 0)}',
                                     style: TextStyle(
                                       color: spot.bar.color,
                                       fontWeight: FontWeight.w500,

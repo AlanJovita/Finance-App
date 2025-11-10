@@ -1,3 +1,4 @@
+import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/caixa.dart';
@@ -172,7 +173,7 @@ class CaixaPage extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'R\$ ${caixa.saldo?.toStringAsFixed(2) ?? '0,00'}',
+                    CurrencyFormatter.format(caixa.saldo),
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 24,
@@ -267,7 +268,7 @@ class CaixaPage extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                'R\$ ${value.toStringAsFixed(2).replaceAll('.', ',')}',
+                CurrencyFormatter.format(value),
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,

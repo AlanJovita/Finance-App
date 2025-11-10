@@ -3,6 +3,7 @@ import 'package:finance_app/models/relatorio_mensal.dart';
 import 'package:finance_app/models/relatorio_semanal.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
+import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -167,119 +168,150 @@ class _DashboardPageState extends State<DashboardPage> {
     final mediaPedidos = relatorio?.mediaPedidosConfirmados ?? 0.0;
     final recordPedidos = relatorio?.recordPedidosConfirmados ?? 0;
 
-    return Card(
-      elevation: 4.0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return ClipRect(
+      child: Card(
+        elevation: 8.0,
+        shadowColor: Colors.black.withOpacity(0.3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        clipBehavior: Clip.none,
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            // Cabeçalho com data e status
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${dataFechamento.day.toString().padLeft(2, '0')}/${dataFechamento.month.toString().padLeft(2, '0')}',
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      _getDiaSemana(dataFechamento.weekday),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
-                    ),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => CaixaPage(caixa: caixa),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.search, size: 18),
-                  label: const Text('Detalhes'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        statusAberto
-                            ? Colors.green.withOpacity(0.2)
-                            : Colors.red.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Cabeçalho com data e botão
+                  Row(
                     children: [
-                      Icon(
-                        statusAberto ? Icons.check_circle : Icons.lock,
-                        color: statusAberto ? Colors.green : Colors.red,
-                        size: 16,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${dataFechamento.day.toString().padLeft(2, '0')}/${dataFechamento.month.toString().padLeft(2, '0')}',
+                            style: Theme.of(context).textTheme.headlineMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            _getDiaSemana(dataFechamento.weekday),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: Colors.grey),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        statusAberto ? 'Aberto' : 'Fechado',
-                        style: TextStyle(
-                          color: statusAberto ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CaixaPage(caixa: caixa),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.search, size: 18),
+                        label: const Text('Detalhes'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
-            // Cards internos com informações
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoCard(
-                    context,
-                    'Saldo',
-                    'R\$ ${saldo.toStringAsFixed(2)}',
-                    mediaSaldo,
-                    recordSaldo,
-                    saldo,
-                    null,
+                  // Cards internos com informações
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildInfoCard(
+                          context,
+                          'Saldo',
+                          CurrencyFormatter.format(saldo),
+                          mediaSaldo,
+                          recordSaldo,
+                          saldo,
+                          null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildInfoCard(
+                          context,
+                          'Pedidos',
+                          pedidosConfirmados.toString(),
+                          mediaPedidos,
+                          recordPedidos.toDouble(),
+                          pedidosConfirmados.toDouble(),
+                          pedidosEstornados,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Badge de status como faixa diagonal
+            Positioned(
+              top: 0,
+              right: -40,
+              child: Transform.rotate(
+                angle: 0.785398, // 45 graus
+                child: Container(
+                  width: 170,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusAberto ? Colors.green : Colors.red,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 30),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          statusAberto ? Icons.lock_open : Icons.lock,
+                          color: Colors.white,
+                          size: 12,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            statusAberto ? 'Aberto' : 'Fechado',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              letterSpacing: 0.5,
+                              height: 1.0,
+                            ),
+                            overflow: TextOverflow.visible,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildInfoCard(
-                    context,
-                    'Pedidos',
-                    pedidosConfirmados.toString(),
-                    mediaPedidos,
-                    recordPedidos.toDouble(),
-                    pedidosConfirmados.toDouble(),
-                    pedidosEstornados,
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -344,42 +376,20 @@ class _DashboardPageState extends State<DashboardPage> {
                 ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
               if (estornados != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.cancel,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cancel, color: Colors.orange.shade700, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$estornados',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
                         color: Colors.orange.shade700,
-                        size: 14,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        estornados.toString(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'estornados',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -396,7 +406,7 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '${percentMedia.abs().toStringAsFixed(0)}% ${isMediaPositive ? "acima da" : "abaixo da"} média',
+                  '${CurrencyFormatter.formatSimple(percentMedia.abs(), decimals: 0)}% ${isMediaPositive ? "acima da" : "abaixo da"} média',
                   style: TextStyle(
                     fontSize: 11,
                     color: isMediaPositive ? Colors.green : Colors.red,
@@ -418,7 +428,7 @@ class _DashboardPageState extends State<DashboardPage> {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '${percentRecord.abs().toStringAsFixed(0)}% ${isRecordPositive ? "acima do" : "abaixo do"} record',
+                  '${CurrencyFormatter.formatSimple(percentRecord.abs(), decimals: 0)}% ${isRecordPositive ? "acima do" : "abaixo do"} record',
                   style: TextStyle(
                     fontSize: 11,
                     color: isRecordPositive ? Colors.green : Colors.red,

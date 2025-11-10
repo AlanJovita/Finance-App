@@ -1,3 +1,4 @@
+import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/caixa.dart';
@@ -102,7 +103,7 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
                                     TextSpan(
                                       text:
                                           isSaldo
-                                              ? 'Saldo: R\$ ${(caixa.saldo ?? 0).toStringAsFixed(2)}'
+                                              ? 'Saldo: ${CurrencyFormatter.format(caixa.saldo)}'
                                               : 'Pedidos: ${(caixa.totalPedidoConfirmado ?? 0)}',
                                       style: TextStyle(
                                         color: spot.bar.color,

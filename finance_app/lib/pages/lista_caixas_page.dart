@@ -1,4 +1,5 @@
 import 'package:finance_app/pages/caixa_page.dart';
+import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:flutter/material.dart';
 import '../models/caixa.dart';
 import '../services/api_service.dart';
@@ -178,7 +179,7 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'R\$ ${caixa.saldo?.toStringAsFixed(2) ?? '0.00'}',
+                                  CurrencyFormatter.format(caixa.saldo),
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
