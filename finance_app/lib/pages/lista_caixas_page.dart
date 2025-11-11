@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/caixa.dart';
 import '../services/api_service.dart';
 import '../widgets/charts/caixas_chart_widget.dart';
+import '../widgets/app_drawer.dart';
 
 class ListaCaixasPage extends StatefulWidget {
   const ListaCaixasPage({super.key});
@@ -48,6 +49,7 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
 
     return Scaffold(
       appBar: AppBar(title: const Text('Lista de Caixas')),
+      drawer: const AppDrawer(),
       body: FutureBuilder<List<Caixa>>(
         future: _caixasFuture,
         builder: (context, snapshot) {

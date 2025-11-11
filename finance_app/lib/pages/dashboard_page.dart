@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/app_drawer.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -92,13 +93,16 @@ class _DashboardPageState extends State<DashboardPage> {
                   : Icons.light_mode,
             ),
             onPressed: () => themeProvider.toggleTheme(),
+            tooltip: 'Alternar tema',
           ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => authProvider.logout(),
+            tooltip: 'Sair',
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -214,8 +218,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         icon: const Icon(Icons.search, size: 18),
                         label: const Text('Detalhes'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 8,

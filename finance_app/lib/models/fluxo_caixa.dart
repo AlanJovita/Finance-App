@@ -108,9 +108,9 @@ class FluxoCaixa {
     var date = DateTime.tryParse(dateStr);
     if (date != null) return date;
 
-    // Tenta fazer parse do formato "d/M/yyyy" ou "dd/MM/yyyy"
+    // Tenta fazer parse do formato "d-M-yyyy" ou "dd-MM-yyyy"
     try {
-      final parts = dateStr.split('/');
+      final parts = dateStr.split('-');
       if (parts.length == 3) {
         final day = int.parse(parts[0]);
         final month = int.parse(parts[1]);

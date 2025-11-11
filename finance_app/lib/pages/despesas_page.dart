@@ -3,6 +3,7 @@ import 'package:finance_app/widgets/fluxo_form_dialog.dart';
 import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
+import '../widgets/app_drawer.dart';
 
 class DespesasPage extends StatefulWidget {
   const DespesasPage({super.key});
@@ -29,7 +30,7 @@ class _DespesasPageState extends State<DespesasPage> {
 
   void _loadDespesas() {
     setState(() {
-      _despesasFuture = _apiService.listFluxos("tipo_fluxo='despesa'");
+      _despesasFuture = _apiService.listFluxos("tipo_fluxo=2");
     });
   }
 
@@ -133,9 +134,11 @@ class _DespesasPageState extends State<DespesasPage> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showFormDialog(),
+            tooltip: 'Nova despesa',
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: FutureBuilder<List<FluxoCaixa>>(
         future: _despesasFuture,
         builder: (context, snapshot) {
@@ -268,10 +271,22 @@ class _DespesasPageState extends State<DespesasPage> {
                       final categoriaNome = _getCategoriaNome(
                         despesa.idCategoria,
                       );
-                      final dataFormatada =
-                          despesa.dataVencimento != null
-                              ? '${despesa.dataVencimento!.day.toString().padLeft(2, '0')}/${despesa.dataVencimento!.month.toString().padLeft(2, '0')}'
-                              : '';
+
+                      // Formata a data de vencimento
+                      String dataFormatada = '';
+                      if (despesa.dataVencimento != null) {
+                        try {
+                          final day = despesa.dataVencimento!.day
+                              .toString()
+                              .padLeft(2, '0');
+                          final month = despesa.dataVencimento!.month
+                              .toString()
+                              .padLeft(2, '0');
+                          dataFormatada = '$day/$month';
+                        } catch (e) {
+                          print('Erro ao formatar data: $e');
+                        }
+                      }
 
                       return Card(
                         elevation: 2,
@@ -372,16 +387,27 @@ class _DespesasPageState extends State<DespesasPage> {
                                                 : Colors.red[600],
                                       ),
                                     ),
-                                    if (dataFormatada.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        dataFormatada,
-                                        style: TextStyle(
-                                          fontSize: 12,
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: 10,
                                           color: Colors.grey[600],
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          dataFormatada.isNotEmpty
+                                              ? dataFormatada
+                                              : 'S/ data',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(width: 8),

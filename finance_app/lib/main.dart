@@ -7,6 +7,7 @@ import 'pages/dashboard_page.dart';
 import 'pages/lista_caixas_page.dart';
 import 'pages/receitas_page.dart';
 import 'pages/despesas_page.dart';
+import 'utils/app_theme.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,16 +28,8 @@ class MyApp extends StatelessWidget {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             title: 'Controle de Caixa',
-            theme: ThemeData(
-              brightness: Brightness.light,
-              primarySwatch: Colors.blue,
-              visualDensity: VisualDensity.adaptivePlatformDensity,
-            ),
-            darkTheme: ThemeData(
-              brightness: Brightness.dark,
-              primarySwatch: Colors.blue,
-              visualDensity: VisualDensity.adaptivePlatformDensity,
-            ),
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
             home: const AuthWrapper(),
             routes: {

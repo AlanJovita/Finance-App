@@ -3,6 +3,7 @@ import 'package:finance_app/widgets/fluxo_form_dialog.dart';
 import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
+import '../widgets/app_drawer.dart';
 
 class ReceitasPage extends StatefulWidget {
   const ReceitasPage({super.key});
@@ -132,9 +133,11 @@ class _ReceitasPageState extends State<ReceitasPage> {
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showFormDialog(),
+            tooltip: 'Nova receita',
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: FutureBuilder<List<FluxoCaixa>>(
         future: _receitasFuture,
         builder: (context, snapshot) {
@@ -276,10 +279,22 @@ class _ReceitasPageState extends State<ReceitasPage> {
                       final categoriaNome = _getCategoriaNome(
                         receita.idCategoria,
                       );
-                      final dataFormatada =
-                          receita.dataVencimento != null
-                              ? '${receita.dataVencimento!.day.toString().padLeft(2, '0')}/${receita.dataVencimento!.month.toString().padLeft(2, '0')}'
-                              : '';
+
+                      // Formata a data de vencimento
+                      String dataFormatada = '';
+                      if (receita.dataVencimento != null) {
+                        try {
+                          final day = receita.dataVencimento!.day
+                              .toString()
+                              .padLeft(2, '0');
+                          final month = receita.dataVencimento!.month
+                              .toString()
+                              .padLeft(2, '0');
+                          dataFormatada = '$day/$month';
+                        } catch (e) {
+                          print('Erro ao formatar data: $e');
+                        }
+                      }
 
                       return Card(
                         elevation: 2,
@@ -380,16 +395,27 @@ class _ReceitasPageState extends State<ReceitasPage> {
                                                 : Colors.green[600],
                                       ),
                                     ),
-                                    if (dataFormatada.isNotEmpty) ...[
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        dataFormatada,
-                                        style: TextStyle(
-                                          fontSize: 12,
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.calendar_today,
+                                          size: 10,
                                           color: Colors.grey[600],
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          dataFormatada.isNotEmpty
+                                              ? dataFormatada
+                                              : 'S/ data',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(width: 8),

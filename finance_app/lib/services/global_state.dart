@@ -9,5 +9,5 @@ class GlobalState {
 
   List<int> idLojas = [];
 
-  int? get firstIdLoja => idLojas.isNotEmpty ? idLojas.first : null;
+  int get firstIdLoja => idLojas.isNotEmpty ? idLojas.first : 0;
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
+import '../services/global_state.dart';
 
 class FluxoFormDialog extends StatefulWidget {
   final String tipoFluxo;
@@ -70,7 +71,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
   int _gerarIdRef() {
     final now = DateTime.now();
-    final idLoja = 2023;
+    final idLoja = GlobalState().firstIdLoja;
     return int.parse(
       '$idLoja${now.day.toString().padLeft(2, '0')}${now.month.toString().padLeft(2, '0')}${now.year}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}',
     );
@@ -117,14 +118,14 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
       setState(() => _isLoading = true);
 
-      final tipoFluxoValue = widget.tipoFluxo == 'receita' ? '1' : '0';
+      final tipoFluxoValue = widget.tipoFluxo == 'receita' ? '1' : '2';
 
       try {
         // Se for edição simples
         if (widget.fluxo != null) {
           final fluxo = FluxoCaixa(
             id: widget.fluxo!.id,
-            idLoja: 2023,
+            idLoja: GlobalState().firstIdLoja,
             idCategoria: _categoriaId ?? 0,
             descricao: _descricaoController.text,
             valor: valorBase,
@@ -144,7 +145,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
             // Única vez
             final fluxo = FluxoCaixa(
               id: 0,
-              idLoja: 2023,
+              idLoja: GlobalState().firstIdLoja,
               idCategoria: _categoriaId ?? 0,
               descricao: _descricaoController.text,
               valor: valorBase,
@@ -201,7 +202,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
               final fluxo = FluxoCaixa(
                 id: 0,
-                idLoja: 2023,
+                idLoja: GlobalState().firstIdLoja,
                 idCategoria: _categoriaId ?? 0,
                 descricao: descricaoComParcela,
                 valor: valorParcela,
