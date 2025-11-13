@@ -1,9 +1,12 @@
+import 'package:finance_app/models/boleto.dart';
 import 'package:finance_app/models/caixa.dart';
 import 'package:finance_app/models/relatorio_mensal.dart';
 import 'package:finance_app/models/relatorio_semanal.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
+import 'package:finance_app/services/global_state.dart';
 import 'package:finance_app/utils/currency_formatter.dart';
+import 'package:finance_app/widgets/boletos_widget.dart';
 import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +25,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Caixa? _caixa;
   RelatorioSemanal? _relatorioSemanal;
   List<RelatorioMensal> _relatoriosMensais = [];
+  List<Boleto> _boletos = [];
   bool _isLoading = true;
   String? _error;
 
@@ -56,18 +60,66 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       }
 
+      // Busca boletos
+      List<Boleto> boletos = [];
+      try {
+        // Tenta obter o id_cliente do GlobalState
+        final idCliente = GlobalState().firstIdLoja;
+        if (idCliente != null) {
+          boletos = await apiService.checkBoletos(idCliente);
+        }
+      } catch (e) {
+        // Se falhar ao buscar boletos, apenas ignora e continua
+        print('Erro ao buscar boletos: $e');
+      }
+
       setState(() {
         _caixa = caixa;
         _relatorioSemanal = relatorioSemanal;
         _relatoriosMensais = relatoriosMensais;
+        _boletos = boletos;
         _isLoading = false;
       });
+
+      // Mostra modal se houver boletos vencidos
+      if (boletos.any((b) => b.isOverdue)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showOverdueBoletosDialog();
+        });
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
     }
+  }
+
+  void _showOverdueBoletosDialog() {
+    final boletosVencidos = _boletos.where((b) => b.isOverdue).toList();
+
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            icon: const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.red,
+              size: 48,
+            ),
+            title: const Text('Boletos Vencidos'),
+            content: Text(
+              'Você possui ${boletosVencidos.length} boleto(s) vencido(s).\n\n'
+              'Por favor, verifique e regularize sua situação o quanto antes.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Fechar'),
+              ),
+            ],
+          ),
+    );
   }
 
   @override
@@ -136,8 +188,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      _buildMainCard(context),
+                      _buildMainCard(context, themeProvider),
                       const SizedBox(height: 16),
+                      BoletosWidget(boletos: _boletos),
+                      if (_boletos.isNotEmpty) const SizedBox(height: 16),
                       _buildActionCardsRow(context),
                       const SizedBox(height: 16),
                       MonthlyChartsWidget(relatorios: _relatoriosMensais),
@@ -148,8 +202,10 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildMainCard(BuildContext context) {
+  Widget _buildMainCard(BuildContext context, dynamic themeProvider) {
     final caixa = _caixa;
+    final theme = Theme.of(context);
+
     if (caixa == null) {
       return const Card(
         child: Padding(
@@ -215,9 +271,17 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                           );
                         },
-                        icon: const Icon(Icons.search, size: 18),
-                        label: const Text('Detalhes'),
+                        icon: Icon(
+                          Icons.search,
+                          color: theme.colorScheme.onSurface,
+                          size: 18,
+                        ),
+                        label: Text(
+                          'Detalhes',
+                          style: TextStyle(color: theme.colorScheme.onSurface),
+                        ),
                         style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.surface,
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 8,

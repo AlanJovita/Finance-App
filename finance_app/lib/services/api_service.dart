@@ -5,6 +5,7 @@ import '../models/categoria.dart';
 import '../models/caixa.dart';
 import '../models/relatorio_mensal.dart';
 import '../models/relatorio_semanal.dart';
+import '../models/boleto.dart';
 import 'global_state.dart';
 
 class ApiService {
@@ -240,6 +241,20 @@ class ApiService {
       throw Exception(
         'Falha ao tentar realizar o login. Status: ${response.statusCode}',
       );
+    }
+  }
+
+  // Boletos
+  Future<List<Boleto>> checkBoletos(int idCliente) async {
+    final response = await _handleRequest(
+      () => http.get(Uri.parse('$_baseUrl/boletos/check/$idCliente')),
+    );
+
+    if (response['success'] == true) {
+      final List<dynamic> list = response['data'] ?? [];
+      return list.map((item) => Boleto.fromJson(item)).toList();
+    } else {
+      throw Exception(response['msg'] ?? 'Erro ao buscar boletos.');
     }
   }
 }

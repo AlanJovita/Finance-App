@@ -8,6 +8,7 @@ class GlobalState {
   GlobalState._internal();
 
   List<int> idLojas = [];
+  int? idCliente;
 
   int get firstIdLoja => idLojas.isNotEmpty ? idLojas.first : 0;
 }

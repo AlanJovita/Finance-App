@@ -130,6 +130,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       body: Container(
@@ -179,17 +180,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
                               // Título
                               Text(
-                                'Bem-vindo',
+                                'Finance App',
                                 style: theme.textTheme.headlineMedium?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.primary,
+                                  color: theme.colorScheme.secondary,
                                 ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Faça login para continuar',
                                 style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: Colors.grey[600],
+                                  color:
+                                      isDark
+                                          ? Colors.grey[400]
+                                          : Colors.grey[600],
                                 ),
                               ),
                               const SizedBox(height: 32),
@@ -202,9 +206,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                   prefixIcon: const Icon(Icons.person_outline),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.primary,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.error,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.error,
+                                      width: 2,
+                                    ),
                                   ),
                                   filled: true,
-                                  fillColor: Colors.grey[50],
+                                  fillColor: theme.colorScheme.surface,
                                 ),
                                 validator:
                                     (value) =>
@@ -236,9 +266,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.primary,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.error,
+                                      width: 1,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide(
+                                      color: theme.colorScheme.error,
+                                      width: 2,
+                                    ),
                                   ),
                                   filled: true,
-                                  fillColor: Colors.grey[50],
+                                  fillColor: theme.colorScheme.surface,
                                 ),
                                 validator:
                                     (value) =>
@@ -353,39 +409,75 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget _buildLogo() {
     // Tenta carregar o logo da pasta assets
     final logoPath = 'assets/images/logo.png';
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      width: 120,
-      height: 120,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Container principal com a logo
+        Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(60),
-          child: Image.asset(
-            logoPath,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) {
-              // Se o logo não for encontrado, mostra um ícone padrão
-              return Icon(
-                Icons.account_balance_wallet,
-                size: 60,
-                color: Theme.of(context).colorScheme.primary,
-              );
-            },
+          child: ClipOval(
+            child: Padding(
+              padding: const EdgeInsets.all(1.0),
+              child: Image.asset(
+                logoPath,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  // Se o logo não for encontrado, mostra um ícone padrão
+                  return Icon(
+                    Icons.account_balance_wallet,
+                    size: 60,
+                    color: theme.colorScheme.primary,
+                  );
+                },
+              ),
+            ),
           ),
         ),
-      ),
+        // Ícone de dinheiro no canto inferior direito
+        Positioned(
+          bottom: 0,
+          right: 0,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.green.shade400,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? theme.scaffoldBackgroundColor : Colors.white,
+                width: 3,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.attach_money,
+              size: 20,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

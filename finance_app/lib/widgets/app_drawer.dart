@@ -41,7 +41,7 @@ class AppDrawer extends StatelessWidget {
                       width: 80,
                       height: 80,
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: Colors.transparent,
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
@@ -76,9 +76,7 @@ class AppDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      authProvider.isAuthenticated
-                          ? 'Bem-vindo!'
-                          : 'Controle Financeiro',
+                      'Controle Financeiro',
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: Colors.white.withOpacity(0.9),
                       ),
@@ -127,7 +125,7 @@ class AppDrawer extends StatelessWidget {
                 ListTile(
                   leading: Icon(
                     isDark ? Icons.dark_mode : Icons.light_mode,
-                    color: theme.colorScheme.primary,
+                    color: theme.colorScheme.onSurface,
                   ),
                   title: Text(
                     isDark ? 'Tema Escuro' : 'Tema Claro',
@@ -136,7 +134,7 @@ class AppDrawer extends StatelessWidget {
                   trailing: Switch(
                     value: isDark,
                     onChanged: (_) => themeProvider.toggleTheme(),
-                    activeColor: theme.colorScheme.primary,
+                    activeColor: theme.colorScheme.onSurface,
                   ),
                   onTap: () => themeProvider.toggleTheme(),
                 ),
@@ -154,7 +152,7 @@ class AppDrawer extends StatelessWidget {
                   Navigator.pop(context);
                   authProvider.logout();
                 },
-                icon: const Icon(Icons.logout),
+                icon: const Icon(Icons.logout, color: Colors.white),
                 label: const Text('Sair'),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 50),
@@ -193,14 +191,11 @@ class AppDrawer extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
-        leading: Icon(icon, color: iconColor ?? theme.colorScheme.primary),
+        leading: Icon(icon, color: iconColor ?? theme.colorScheme.onSurface),
         title: Text(
           title,
           style: TextStyle(
-            color:
-                isSelected
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurface,
+            color: theme.colorScheme.onSurface,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),

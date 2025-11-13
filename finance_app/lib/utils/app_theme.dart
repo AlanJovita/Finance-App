@@ -8,7 +8,7 @@ class AppTheme {
   static const Color accentBlue = Color(0xFF87CEEB); // Azul claro accent
 
   // Cores para o tema light
-  static const Color lightBackground = Color(0xFFF5F7FA);
+  static const Color lightBackground = Color(0xFFE5E7EB);
   static const Color lightSurface = Color(0xFFFFFFFF);
   static const Color lightCardBg = Color(0xFFFFFFFF);
 
@@ -51,11 +51,11 @@ class AppTheme {
     scaffoldBackgroundColor: lightBackground,
 
     appBarTheme: AppBarTheme(
-      backgroundColor: primaryBlue,
+      backgroundColor: darkBlue,
       foregroundColor: Colors.white,
       elevation: 0,
       centerTitle: true,
-      iconTheme: const IconThemeData(color: Colors.white),
+      iconTheme: const IconThemeData(color: lightTextPrimary),
       titleTextStyle: const TextStyle(
         color: Colors.white,
         fontSize: 20,
@@ -140,7 +140,7 @@ class AppTheme {
 
     dividerTheme: DividerThemeData(color: Colors.grey[300], thickness: 1),
 
-    iconTheme: const IconThemeData(color: primaryBlue, size: 24),
+    iconTheme: const IconThemeData(color: lightTextPrimary, size: 24),
 
     listTileTheme: ListTileThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -197,7 +197,7 @@ class AppTheme {
       foregroundColor: darkTextPrimary,
       elevation: 0,
       centerTitle: true,
-      iconTheme: const IconThemeData(color: secondaryBlue),
+      iconTheme: const IconThemeData(color: darkTextPrimary),
       titleTextStyle: const TextStyle(
         color: darkTextPrimary,
         fontSize: 20,
@@ -282,7 +282,7 @@ class AppTheme {
 
     dividerTheme: DividerThemeData(color: Colors.grey[800], thickness: 1),
 
-    iconTheme: const IconThemeData(color: secondaryBlue, size: 24),
+    iconTheme: const IconThemeData(color: darkTextPrimary, size: 24),
 
     listTileTheme: ListTileThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
