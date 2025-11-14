@@ -9,7 +9,7 @@ import '../models/boleto.dart';
 import 'global_state.dart';
 
 class ApiService {
-  final String _baseUrl = 'http://localhost:5000';
+  final String _baseUrl = 'https://finance-api.premiosistemas.com.br';
   // Cache simples em memória
 
   Future<Map<String, dynamic>> _handleRequest(
