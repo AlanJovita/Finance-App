@@ -7,13 +7,15 @@ import '../models/relatorio_mensal.dart';
 import '../models/relatorio_semanal.dart';
 import '../models/boleto.dart';
 import 'global_state.dart';
+import 'logger_service.dart';
 
 class ApiService {
   final String _baseUrl = 'https://finance-api.premiosistemas.com.br';
-  // Cache simples em memória
+  final _logger = LoggerService();
 
   Future<Map<String, dynamic>> _handleRequest(
     Future<http.Response> Function() request,
+    String endpoint,
   ) async {
     try {
       final response = await request();
@@ -24,237 +26,411 @@ class ApiService {
         try {
           final errorBody = json.decode(response.body);
           if (errorBody['msg'] != null) {
-            throw Exception(errorBody['msg']);
+            final error = Exception(errorBody['msg']);
+            await _logger.logError(
+              'ApiService.$endpoint',
+              error,
+              additionalInfo: {
+                'statusCode': response.statusCode,
+                'response': response.body,
+              },
+            );
+            throw error;
           }
-        } catch (_) {
-          // Ignora se o corpo não for um JSON válido ou não tiver 'msg'
+        } catch (e) {
+          if (e is! Exception) {
+            // Ignora se o corpo não for um JSON válido ou não tiver 'msg'
+          } else {
+            rethrow;
+          }
         }
-        throw Exception('Falha na comunicação. Status: ${response.statusCode}');
+        final error = Exception(
+          'Falha na comunicação. Status: ${response.statusCode}',
+        );
+        await _logger.logError(
+          'ApiService.$endpoint',
+          error,
+          additionalInfo: {
+            'statusCode': response.statusCode,
+            'response': response.body,
+          },
+        );
+        throw error;
       }
-    } catch (e) {
-      // Apenas repassa a exceção para ser tratada pela camada de UI
+    } catch (e, stackTrace) {
+      await _logger.logError('ApiService.$endpoint', e, stackTrace: stackTrace);
       rethrow;
     }
   }
 
   // Endpoints de Fluxo de Caixa
   Future<FluxoCaixa> getFluxo(int id) async {
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/fluxo/$id')),
-    );
-    if (response['success'] == true) {
-      return FluxoCaixa.fromJson(response['data']);
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar fluxo.');
+    try {
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/fluxo/$id')),
+        'getFluxo',
+      );
+      if (response['success'] == true) {
+        return FluxoCaixa.fromJson(response['data']);
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar fluxo.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getFluxo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id},
+      );
+      rethrow;
     }
   }
 
   Future<List<FluxoCaixa>> listFluxos(String where) async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/fluxo/list/$idLoja/$where')),
-    );
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/fluxo/list/$idLoja/$where')),
+        'listFluxos',
+      );
 
-    if (response['success'] == true) {
-      final List<dynamic> list = response['data'];
-      return list.map((item) => FluxoCaixa.fromJson(item)).toList();
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao listar fluxos.');
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'];
+        return list.map((item) => FluxoCaixa.fromJson(item)).toList();
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao listar fluxos.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listFluxos',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'where': where},
+      );
+      rethrow;
     }
   }
 
   Future<Map<String, dynamic>> createFluxo(FluxoCaixa fluxo) async {
-    final response = await _handleRequest(
-      () => http.post(
-        Uri.parse('$_baseUrl/fluxo'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(fluxo.toJson()),
-      ),
-    );
-    if (response['success'] == true) {
-      return response;
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao criar fluxo.');
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/fluxo'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(fluxo.toJson()),
+        ),
+        'createFluxo',
+      );
+      if (response['success'] == true) {
+        return response;
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao criar fluxo.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.createFluxo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'fluxo': fluxo.toJson()},
+      );
+      rethrow;
     }
   }
 
   Future<Map<String, dynamic>> updateFluxo(FluxoCaixa fluxo) async {
-    final response = await _handleRequest(
-      () => http.put(
-        Uri.parse('$_baseUrl/fluxo'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(fluxo.toJson()),
-      ),
-    );
-    if (response['success'] == true) {
-      return response;
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao atualizar fluxo.');
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/fluxo'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(fluxo.toJson()),
+        ),
+        'updateFluxo',
+      );
+      if (response['success'] == true) {
+        return response;
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao atualizar fluxo.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateFluxo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'fluxo': fluxo.toJson()},
+      );
+      rethrow;
     }
   }
 
   Future<Map<String, dynamic>> deleteFluxo(int id, int idRef) async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.delete(Uri.parse('$_baseUrl/fluxo/$id/$idLoja/$idRef')),
-    );
-    if (response['success'] == true) {
-      return response;
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao deletar fluxo.');
+      final response = await _handleRequest(
+        () => http.delete(Uri.parse('$_baseUrl/fluxo/$id/$idLoja/$idRef')),
+        'deleteFluxo',
+      );
+      if (response['success'] == true) {
+        return response;
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao deletar fluxo.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteFluxo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id, 'idRef': idRef},
+      );
+      rethrow;
     }
   }
 
   // Endpoints de Categoria
   Future<Categoria> getCategoria(int id) async {
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/categoria/$id')),
-    );
-    if (response['success'] == true) {
-      return Categoria.fromJson(response['data']);
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar categoria.');
+    try {
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/categoria/$id')),
+        'getCategoria',
+      );
+      if (response['success'] == true) {
+        return Categoria.fromJson(response['data']);
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar categoria.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getCategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id},
+      );
+      rethrow;
     }
   }
 
   Future<List<Categoria>> listCategorias() async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/categoria/list/$idLoja')),
-    );
-    if (response['success'] == true) {
-      final List<dynamic> list = response['data'];
-      return list.map((item) => Categoria.fromJson(item)).toList();
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao listar categorias.');
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/categoria/list/$idLoja')),
+        'listCategorias',
+      );
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'];
+        return list.map((item) => Categoria.fromJson(item)).toList();
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao listar categorias.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listCategorias',
+        e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
   }
 
   // Endpoints de Caixa
   Future<Caixa> getCaixa() async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/caixa/$idLoja')),
-    );
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/caixa/$idLoja')),
+        'getCaixa',
+      );
 
-    if (response['success'] == true) {
-      if (response['data'] == null) {
-        throw Exception('Caixa não encontrado para a loja $idLoja.');
+      if (response['success'] == true) {
+        if (response['data'] == null) {
+          throw Exception('Caixa não encontrado para a loja $idLoja.');
+        }
+        return Caixa.fromJson(response['data']);
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar caixa.');
       }
-      return Caixa.fromJson(response['data']);
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar caixa.');
+    } catch (e, stackTrace) {
+      await _logger.logError('ApiService.getCaixa', e, stackTrace: stackTrace);
+      rethrow;
     }
   }
 
   Future<List<Caixa>> getCaixas() async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/caixas/$idLoja')),
-    );
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/caixas/$idLoja')),
+        'getCaixas',
+      );
 
-    if (response['success'] == true) {
-      final List<dynamic> list = response['data'];
-      return list.map((item) => Caixa.fromJson(item)).toList();
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar lista de caixas.');
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'];
+        return list.map((item) => Caixa.fromJson(item)).toList();
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar lista de caixas.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError('ApiService.getCaixas', e, stackTrace: stackTrace);
+      rethrow;
     }
   }
 
   Future<Map<String, dynamic>> updateCaixa(Caixa caixa) async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.post(
-        Uri.parse('$_baseUrl/caixa/$idLoja'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(caixa.toJson()),
-      ),
-    );
-    if (response['success'] == true) {
-      return response;
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao atualizar caixa.');
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/caixa/$idLoja'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(caixa.toJson()),
+        ),
+        'updateCaixa',
+      );
+      if (response['success'] == true) {
+        return response;
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao atualizar caixa.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateCaixa',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'caixa': caixa.toJson()},
+      );
+      rethrow;
     }
   }
 
   // Relatório Mensal
   Future<List<RelatorioMensal>> getRelatorioMensal(int ano) async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/caixa/mensal/$idLoja/$ano')),
-    );
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/caixa/mensal/$idLoja/$ano')),
+        'getRelatorioMensal',
+      );
 
-    if (response['success'] == true) {
-      final List<dynamic> list = response['data'];
-      return list.map((item) => RelatorioMensal.fromJson(item)).toList();
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar relatório mensal.');
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'];
+        return list.map((item) => RelatorioMensal.fromJson(item)).toList();
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar relatório mensal.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getRelatorioMensal',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'ano': ano},
+      );
+      rethrow;
     }
   }
 
   // Relatório Semanal
   Future<List<RelatorioSemanal>> getRelatorioSemanal() async {
-    final idLoja = GlobalState().firstIdLoja;
-    if (idLoja == null) throw Exception('Nenhuma loja selecionada.');
+    try {
+      final idLoja = GlobalState().firstIdLoja;
 
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/caixa/semanal/$idLoja')),
-    );
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/caixa/semanal/$idLoja')),
+        'getRelatorioSemanal',
+      );
 
-    if (response['success'] == true) {
-      final List<dynamic> list = response['data'];
-      return list.map((item) => RelatorioSemanal.fromJson(item)).toList();
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar relatório semanal.');
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'];
+        return list.map((item) => RelatorioSemanal.fromJson(item)).toList();
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar relatório semanal.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getRelatorioSemanal',
+        e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
     }
   }
 
   // Login
   Future<Map<String, dynamic>> login(String user, String password) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'login': user, 'senha': password}),
-    );
-
-    if (response.statusCode == 200 || response.statusCode == 401) {
-      final decodedJson = json.decode(response.body);
-      if (decodedJson['success'] == false) {
-        throw Exception(decodedJson['msg'] ?? 'Credenciais inválidas');
-      }
-      return decodedJson;
-    } else {
-      throw Exception(
-        'Falha ao tentar realizar o login. Status: ${response.statusCode}',
+    try {
+      await _logger.logInfo(
+        'ApiService.login',
+        'Tentando login para usuário: $user',
       );
+
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'login': user, 'senha': password}),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception('Tempo esgotado ao tentar conectar ao servidor');
+            },
+          );
+
+      if (response.statusCode == 200 || response.statusCode == 401) {
+        final decodedJson = json.decode(response.body);
+        if (decodedJson['success'] == false) {
+          throw Exception(decodedJson['msg'] ?? 'Credenciais inválidas');
+        }
+
+        await _logger.logInfo(
+          'ApiService.login',
+          'Login realizado com sucesso para usuário: $user',
+        );
+        return decodedJson;
+      } else {
+        throw Exception(
+          'Falha ao tentar realizar o login. Status: ${response.statusCode}',
+        );
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.login',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'user': user, 'baseUrl': _baseUrl},
+      );
+      rethrow;
     }
   }
 
   // Boletos
   Future<List<Boleto>> checkBoletos(int idCliente) async {
-    final response = await _handleRequest(
-      () => http.get(Uri.parse('$_baseUrl/boletos/check/$idCliente')),
-    );
+    try {
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/boletos/check/$idCliente')),
+        'checkBoletos',
+      );
 
-    if (response['success'] == true) {
-      final List<dynamic> list = response['data'] ?? [];
-      return list.map((item) => Boleto.fromJson(item)).toList();
-    } else {
-      throw Exception(response['msg'] ?? 'Erro ao buscar boletos.');
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => Boleto.fromJson(item)).toList();
+      } else {
+        throw Exception(response['msg'] ?? 'Erro ao buscar boletos.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.checkBoletos',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idCliente': idCliente},
+      );
+      rethrow;
     }
   }
 }

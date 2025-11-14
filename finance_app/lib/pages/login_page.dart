@@ -145,253 +145,301 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ],
           ),
         ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 450),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Card(
-                      elevation: 20.0,
-                      shadowColor: Colors.black45,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          children: [
+            // Versão do app no canto superior direito
+            Positioned(
+              top: 16,
+              right: 16,
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color:
+                          isDark
+                              ? Colors.white.withOpacity(0.7)
+                              : Colors.white.withOpacity(0.9),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'v1.0.0',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color:
+                            isDark
+                                ? Colors.white.withOpacity(0.7)
+                                : Colors.white.withOpacity(0.9),
+                        letterSpacing: 0.5,
                       ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Conteúdo principal centralizado
+            Center(
+              child: SingleChildScrollView(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SlideTransition(
+                    position: _slideAnimation,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 450),
                       child: Padding(
-                        padding: const EdgeInsets.all(40.0),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Logo com animação
-                              ScaleTransition(
-                                scale: _scaleAnimation,
-                                child: Hero(
-                                  tag: 'app_logo',
-                                  child: _buildLogo(),
-                                ),
-                              ),
-                              const SizedBox(height: 32),
-
-                              // Título
-                              Text(
-                                'Finance App',
-                                style: theme.textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.secondary,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Faça login para continuar',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color:
-                                      isDark
-                                          ? Colors.grey[400]
-                                          : Colors.grey[600],
-                                ),
-                              ),
-                              const SizedBox(height: 32),
-
-                              // Campo de usuário
-                              TextFormField(
-                                controller: _userController,
-                                decoration: InputDecoration(
-                                  labelText: 'Usuário',
-                                  prefixIcon: const Icon(Icons.person_outline),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.primary,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.error,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.error,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  filled: true,
-                                  fillColor: theme.colorScheme.surface,
-                                ),
-                                validator:
-                                    (value) =>
-                                        (value == null || value.isEmpty)
-                                            ? 'Campo obrigatório'
-                                            : null,
-                                textInputAction: TextInputAction.next,
-                              ),
-                              const SizedBox(height: 20),
-
-                              // Campo de senha
-                              TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                decoration: InputDecoration(
-                                  labelText: 'Senha',
-                                  prefixIcon: const Icon(Icons.lock_outline),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.primary,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  errorBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.error,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  focusedErrorBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(
-                                      color: theme.colorScheme.error,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  filled: true,
-                                  fillColor: theme.colorScheme.surface,
-                                ),
-                                validator:
-                                    (value) =>
-                                        (value == null || value.isEmpty)
-                                            ? 'Campo obrigatório'
-                                            : null,
-                                textInputAction: TextInputAction.done,
-                                onFieldSubmitted: (_) => _login(),
-                              ),
-                              const SizedBox(height: 16),
-
-                              // Checkbox "Lembrar login"
-                              Row(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Card(
+                          elevation: 20.0,
+                          shadowColor: Colors.black45,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(40.0),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Checkbox(
-                                    value: _rememberMe,
-                                    onChanged: (value) {
-                                      setState(
-                                        () => _rememberMe = value ?? false,
-                                      );
-                                    },
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
+                                  // Logo com animação
+                                  ScaleTransition(
+                                    scale: _scaleAnimation,
+                                    child: Hero(
+                                      tag: 'app_logo',
+                                      child: _buildLogo(),
                                     ),
                                   ),
-                                  Text(
-                                    'Lembrar login',
-                                    style: theme.textTheme.bodyMedium,
-                                  ),
-                                  const Spacer(),
-                                  TextButton(
-                                    onPressed: () {
-                                      // TODO: Implementar recuperação de senha
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Funcionalidade em desenvolvimento',
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: Text(
-                                      'Esqueceu a senha?',
-                                      style: TextStyle(
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 32),
+                                  const SizedBox(height: 32),
 
-                              // Botão de login
-                              _isLoading
-                                  ? const SizedBox(
-                                    height: 50,
-                                    child: Center(
-                                      child: CircularProgressIndicator(),
+                                  // Título
+                                  Text(
+                                    'Finance App',
+                                    style: theme.textTheme.headlineMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.secondary,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Faça login para continuar',
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color:
+                                          isDark
+                                              ? Colors.grey[400]
+                                              : Colors.grey[600],
                                     ),
-                                  )
-                                  : AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    width: double.infinity,
-                                    height: 50,
-                                    child: ElevatedButton(
-                                      onPressed: _login,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            theme.colorScheme.primary,
-                                        foregroundColor: Colors.white,
+                                  ),
+                                  const SizedBox(height: 32),
+
+                                  // Campo de usuário
+                                  TextFormField(
+                                    controller: _userController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Usuário',
+                                      prefixIcon: const Icon(
+                                        Icons.person_outline,
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: theme.colorScheme.primary,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      errorBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: theme.colorScheme.error,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      focusedErrorBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: theme.colorScheme.error,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: theme.colorScheme.surface,
+                                    ),
+                                    validator:
+                                        (value) =>
+                                            (value == null || value.isEmpty)
+                                                ? 'Campo obrigatório'
+                                                : null,
+                                    textInputAction: TextInputAction.next,
+                                  ),
+                                  const SizedBox(height: 20),
+
+                                  // Campo de senha
+                                  TextFormField(
+                                    controller: _passwordController,
+                                    obscureText: _obscurePassword,
+                                    decoration: InputDecoration(
+                                      labelText: 'Senha',
+                                      prefixIcon: const Icon(
+                                        Icons.lock_outline,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_outlined
+                                              : Icons.visibility_off_outlined,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _obscurePassword =
+                                                !_obscurePassword;
+                                          });
+                                        },
+                                      ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: theme.colorScheme.primary,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      errorBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: theme.colorScheme.error,
+                                          width: 1,
+                                        ),
+                                      ),
+                                      focusedErrorBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                          color: theme.colorScheme.error,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: theme.colorScheme.surface,
+                                    ),
+                                    validator:
+                                        (value) =>
+                                            (value == null || value.isEmpty)
+                                                ? 'Campo obrigatório'
+                                                : null,
+                                    textInputAction: TextInputAction.done,
+                                    onFieldSubmitted: (_) => _login(),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // Checkbox "Lembrar login"
+                                  Row(
+                                    children: [
+                                      Checkbox(
+                                        value: _rememberMe,
+                                        onChanged: (value) {
+                                          setState(
+                                            () => _rememberMe = value ?? false,
+                                          );
+                                        },
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
-                                            12,
+                                            4,
                                           ),
                                         ),
-                                        elevation: 5,
                                       ),
-                                      child: const Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
-                                            'Entrar',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
+                                      Text(
+                                        'Lembrar login',
+                                        style: theme.textTheme.bodyMedium,
+                                      ),
+                                      const Spacer(),
+                                      TextButton(
+                                        onPressed: () {
+                                          // TODO: Implementar recuperação de senha
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Funcionalidade em desenvolvimento',
+                                              ),
                                             ),
+                                          );
+                                        },
+                                        child: Text(
+                                          'Esqueceu a senha?',
+                                          style: TextStyle(
+                                            color: theme.colorScheme.primary,
                                           ),
-                                          SizedBox(width: 8),
-                                          Icon(Icons.arrow_forward),
-                                        ],
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                            ],
+                                  const SizedBox(height: 32),
+
+                                  // Botão de login
+                                  _isLoading
+                                      ? const SizedBox(
+                                        height: 50,
+                                        child: Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      )
+                                      : AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        width: double.infinity,
+                                        height: 50,
+                                        child: ElevatedButton(
+                                          onPressed: _login,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                theme.colorScheme.primary,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            elevation: 5,
+                                          ),
+                                          child: const Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'Entrar',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                              SizedBox(width: 8),
+                                              Icon(Icons.arrow_forward),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -400,7 +448,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
