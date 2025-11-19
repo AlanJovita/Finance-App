@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
 import '../services/global_state.dart';
+import '../utils/responsive_utils.dart';
+import 'categoria_form_dialog.dart';
 
 class FluxoFormDialog extends StatefulWidget {
   final String tipoFluxo;
@@ -37,7 +39,6 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   @override
   void initState() {
     super.initState();
-    _loadCategorias();
     _dataVencimento = DateTime.now();
 
     if (widget.fluxo != null) {
@@ -48,6 +49,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       _confirmado = widget.fluxo!.confirmado ?? false;
       _repeticao = widget.fluxo!.repeticao ?? '1';
     }
+
+    // Carregar categorias após definir os valores iniciais
+    _loadCategorias();
   }
 
   @override
@@ -63,6 +67,17 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       final categorias = await _apiService.listCategorias();
       setState(() {
         _categorias = categorias;
+
+        // Validar se a categoria selecionada existe na lista
+        if (_categoriaId != null && _categoriaId != 0) {
+          final categoriaExiste = _categorias.any(
+            (cat) => cat.id == _categoriaId,
+          );
+          if (!categoriaExiste) {
+            // Se a categoria não existe, definir como "Sem categoria"
+            _categoriaId = 0;
+          }
+        }
       });
     } catch (e) {
       print('Erro ao carregar categorias: $e');
@@ -75,6 +90,55 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     return int.parse(
       '$idLoja${now.day.toString().padLeft(2, '0')}${now.month.toString().padLeft(2, '0')}${now.year}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}',
     );
+  }
+
+  /// Calcula a data de vencimento periódica considerando meses com dias diferentes
+  DateTime _calcularDataVencimento(DateTime dataBase, int numeroParcela) {
+    switch (_repeticao) {
+      case '2': // Diária
+        return dataBase.add(Duration(days: numeroParcela));
+
+      case '3': // Semanal
+        return dataBase.add(Duration(days: numeroParcela * 7));
+
+      case '4': // Mensal
+        int novoMes = dataBase.month + numeroParcela;
+        int novoAno = dataBase.year;
+
+        // Ajustar ano se necessário
+        while (novoMes > 12) {
+          novoMes -= 12;
+          novoAno++;
+        }
+
+        // Ajustar dia se o mês não tiver esse dia
+        int novoDia = dataBase.day;
+        int ultimoDiaDoMes = DateTime(novoAno, novoMes + 1, 0).day;
+        if (novoDia > ultimoDiaDoMes) {
+          novoDia = ultimoDiaDoMes;
+        }
+
+        return DateTime(novoAno, novoMes, novoDia);
+
+      case '5': // Anual
+        int novoAno = dataBase.year + numeroParcela;
+        int novoDia = dataBase.day;
+
+        // Verificar se é 29 de fevereiro em ano não bissexto
+        if (dataBase.month == 2 && dataBase.day == 29) {
+          // Verificar se o novo ano é bissexto
+          bool ehBissexto =
+              (novoAno % 4 == 0 && novoAno % 100 != 0) || (novoAno % 400 == 0);
+          if (!ehBissexto) {
+            novoDia = 28;
+          }
+        }
+
+        return DateTime(novoAno, dataBase.month, novoDia);
+
+      default:
+        return dataBase;
+    }
   }
 
   void _showError(String message) {
@@ -166,36 +230,12 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 _valorEhParcela ? valorBase : valorBase / _numeroParcelas;
 
             for (int i = 0; i < _numeroParcelas; i++) {
-              DateTime dataVencimentoParcela;
-
-              switch (_repeticao) {
-                case '2': // Diária
-                  dataVencimentoParcela = (_dataVencimento ?? DateTime.now())
-                      .add(Duration(days: i));
-                  break;
-                case '3': // Semanal
-                  dataVencimentoParcela = (_dataVencimento ?? DateTime.now())
-                      .add(Duration(days: i * 7));
-                  break;
-                case '4': // Mensal
-                  final dataBase = _dataVencimento ?? DateTime.now();
-                  dataVencimentoParcela = DateTime(
-                    dataBase.year,
-                    dataBase.month + i,
-                    dataBase.day,
-                  );
-                  break;
-                case '5': // Anual
-                  final dataBase = _dataVencimento ?? DateTime.now();
-                  dataVencimentoParcela = DateTime(
-                    dataBase.year + i,
-                    dataBase.month,
-                    dataBase.day,
-                  );
-                  break;
-                default:
-                  dataVencimentoParcela = _dataVencimento ?? DateTime.now();
-              }
+              // Calcular data de vencimento periódica
+              final dataBase = _dataVencimento ?? DateTime.now();
+              final dataVencimentoParcela = _calcularDataVencimento(
+                dataBase,
+                i,
+              );
 
               final descricaoComParcela =
                   '${_descricaoController.text} [${i + 1}/$_numeroParcelas]';
@@ -241,6 +281,13 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       initialDate: _dataVencimento ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
+      locale: const Locale('pt', 'BR'),
+      helpText: 'Selecione a data de vencimento',
+      cancelText: 'Cancelar',
+      confirmText: 'Confirmar',
+      fieldLabelText: 'Data de vencimento',
+      errorFormatText: 'Data inválida',
+      errorInvalidText: 'Data fora do intervalo permitido',
     );
     if (picked != null && picked != _dataVencimento) {
       setState(() {
@@ -249,216 +296,463 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     }
   }
 
+  Future<void> _abrirDialogNovaCategoria() async {
+    final int? novaCategoriaId = await showDialog<int>(
+      context: context,
+      builder:
+          (context) => CategoriaFormDialog(
+            tipoFluxo: widget.tipoFluxo == 'receita' ? 1 : 2,
+          ),
+    );
+
+    if (novaCategoriaId != null) {
+      // Recarregar categorias
+      await _loadCategorias();
+      // Selecionar a categoria recém-criada
+      setState(() {
+        _categoriaId = novaCategoriaId;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final dialogWidth =
+        ResponsiveUtils.isMobile(context)
+            ? MediaQuery.of(context).size.width * 0.9
+            : ResponsiveUtils.isTablet(context)
+            ? 500.0
+            : 600.0;
+
     return AlertDialog(
       title: Text(
         '${widget.fluxo == null ? 'Nova' : 'Editar'} ${widget.tipoFluxo == 'receita' ? 'Receita' : 'Despesa'}',
+        style: TextStyle(
+          fontSize: ResponsiveUtils.getFontSize(
+            context,
+            mobile: 18.0,
+            tablet: 20.0,
+            desktop: 22.0,
+          ),
+        ),
       ),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _descricaoController,
-                decoration: const InputDecoration(
-                  labelText: 'Descrição',
-                  border: OutlineInputBorder(),
-                  helperText: 'Mínimo 3 caracteres',
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Campo obrigatório';
-                  }
-                  if (value.trim().length < 3) {
-                    return 'Mínimo 3 caracteres';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _valorController,
-                decoration: const InputDecoration(
-                  labelText: 'Valor',
-                  prefixText: 'R\$ ',
-                  border: OutlineInputBorder(),
-                  helperText:
-                      'Use vírgula ou ponto para decimais (maior que 0)',
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Campo obrigatório';
-                  }
-                  final valorLimpo = value.replaceAll(',', '.');
-                  final numero = double.tryParse(valorLimpo);
-                  if (numero == null) {
-                    return 'Valor inválido';
-                  }
-                  if (numero <= 0) {
-                    return 'Deve ser maior que zero';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<int>(
-                value: _categoriaId,
-                decoration: const InputDecoration(
-                  labelText: 'Categoria',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  const DropdownMenuItem(
-                    value: 0,
-                    child: Text('Sem categoria'),
-                  ),
-                  ..._categorias.map((cat) {
-                    return DropdownMenuItem<int>(
-                      value: cat.id,
-                      child: Text(cat.nome ?? 'Sem nome'),
-                    );
-                  }),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _categoriaId = value ?? 0;
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Data de Vencimento'),
-                subtitle: Text(
-                  _dataVencimento != null
-                      ? '${_dataVencimento!.day.toString().padLeft(2, '0')}/${_dataVencimento!.month.toString().padLeft(2, '0')}/${_dataVencimento!.year}'
-                      : 'Selecione uma data',
-                ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.calendar_today),
-                  onPressed: _selecionarData,
-                ),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _repeticao,
-                decoration: const InputDecoration(
-                  labelText: 'Repetição',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: '1', child: Text('Única vez')),
-                  DropdownMenuItem(value: '2', child: Text('Diária')),
-                  DropdownMenuItem(value: '3', child: Text('Semanal')),
-                  DropdownMenuItem(value: '4', child: Text('Mensal')),
-                  DropdownMenuItem(value: '5', child: Text('Anual')),
-                ],
-                onChanged:
-                    widget.fluxo != null
-                        ? null
-                        : (value) {
-                          if (value != null) {
-                            setState(() {
-                              _repeticao = value;
-                              if (value != '1') {
-                                _numeroParcelas = 2;
-                                _parcelasController.text = '2';
-                              } else {
-                                _parcelasController.clear();
-                              }
-                            });
-                          }
-                        },
-              ),
-              const SizedBox(height: 12),
-              if (_repeticao != '1' && widget.fluxo == null) ...[
+      contentPadding: context.responsivePadding(
+        mobile: 16.0,
+        tablet: 20.0,
+        desktop: 24.0,
+      ),
+      content: SizedBox(
+        width: dialogWidth,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 TextFormField(
-                  controller: _parcelasController,
-                  decoration: const InputDecoration(
-                    labelText: 'Número de Parcelas',
-                    border: OutlineInputBorder(),
-                    helperText: 'Mínimo 2 parcelas',
+                  controller: _descricaoController,
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getFontSize(context),
                   ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) {
-                    setState(() {
-                      _numeroParcelas = int.tryParse(value) ?? 1;
-                    });
-                  },
+                  decoration: InputDecoration(
+                    labelText: 'Descrição',
+                    labelStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(context),
+                    ),
+                    border: const OutlineInputBorder(),
+                    helperStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(
+                        context,
+                        mobile: 12.0,
+                        tablet: 13.0,
+                        desktop: 14.0,
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: context.responsiveSpacing(),
+                      vertical: context.responsiveSpacing(
+                        mobile: 12.0,
+                        tablet: 14.0,
+                        desktop: 16.0,
+                      ),
+                    ),
+                  ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Campo obrigatório';
                     }
-                    final num = int.tryParse(value);
-                    if (num == null || num < 2) {
-                      return 'Mínimo 2 parcelas';
+                    if (value.trim().length < 3) {
+                      return 'Mínimo 3 caracteres';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
-                RadioListTile<bool>(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Valor é da parcela'),
-                  value: true,
-                  groupValue: _valorEhParcela,
-                  onChanged: (value) {
-                    setState(() {
-                      _valorEhParcela = value ?? true;
-                    });
-                  },
-                ),
-                RadioListTile<bool>(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Valor total a dividir'),
-                  value: false,
-                  groupValue: _valorEhParcela,
-                  onChanged: (value) {
-                    setState(() {
-                      _valorEhParcela = value ?? true;
-                    });
-                  },
-                ),
-                if (!_valorEhParcela && _numeroParcelas > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      'Valor por parcela: R\$ ${(double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0) / _numeroParcelas}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
+                SizedBox(height: context.responsiveSpacing()),
+                TextFormField(
+                  controller: _valorController,
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getFontSize(context),
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Valor',
+                    labelStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(context),
+                    ),
+                    prefixText: 'R\$ ',
+                    border: const OutlineInputBorder(),
+                    helperStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(
+                        context,
+                        mobile: 12.0,
+                        tablet: 13.0,
+                        desktop: 14.0,
+                      ),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: context.responsiveSpacing(),
+                      vertical: context.responsiveSpacing(
+                        mobile: 12.0,
+                        tablet: 14.0,
+                        desktop: 16.0,
                       ),
                     ),
                   ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Campo obrigatório';
+                    }
+                    final valorLimpo = value.replaceAll(',', '.');
+                    final numero = double.tryParse(valorLimpo);
+                    if (numero == null) {
+                      return 'Valor inválido';
+                    }
+                    if (numero <= 0) {
+                      return 'Deve ser maior que zero';
+                    }
+                    return null;
+                  },
+                ),
+                SizedBox(height: context.responsiveSpacing()),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int>(
+                        value:
+                            _categorias.isEmpty
+                                ? null
+                                : (_categorias.any(
+                                      (cat) => cat.id == _categoriaId,
+                                    ) ||
+                                    _categoriaId == 0)
+                                ? _categoriaId
+                                : 0,
+                        style: TextStyle(
+                          fontSize: ResponsiveUtils.getFontSize(context),
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: 'Categoria',
+                          labelStyle: TextStyle(
+                            fontSize: ResponsiveUtils.getFontSize(context),
+                          ),
+                          border: const OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: context.responsiveSpacing(),
+                            vertical: context.responsiveSpacing(
+                              mobile: 12.0,
+                              tablet: 14.0,
+                              desktop: 16.0,
+                            ),
+                          ),
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 0,
+                            child: Text('Sem categoria'),
+                          ),
+                          ..._categorias.map((cat) {
+                            return DropdownMenuItem<int>(
+                              value: cat.id,
+                              child: Text(
+                                cat.descricao ?? 'Sem nome',
+                                style: TextStyle(
+                                  fontSize: ResponsiveUtils.getFontSize(
+                                    context,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _categoriaId = value ?? 0;
+                          });
+                        },
+                      ),
+                    ),
+                    SizedBox(width: context.responsiveSpacing(mobile: 8.0)),
+                    Container(
+                      margin: const EdgeInsets.only(top: 8.0),
+                      child: IconButton(
+                        onPressed: _abrirDialogNovaCategoria,
+                        icon: Icon(
+                          Icons.add_circle_outline,
+                          size: ResponsiveUtils.getIconSize(context),
+                        ),
+                        tooltip: 'Nova categoria',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).primaryColor.withOpacity(0.1),
+                          padding: EdgeInsets.all(
+                            context.responsiveSpacing(
+                              mobile: 12.0,
+                              tablet: 14.0,
+                              desktop: 16.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: context.responsiveSpacing()),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Data de Vencimento',
+                    style: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(context),
+                    ),
+                  ),
+                  subtitle: Text(
+                    _dataVencimento != null
+                        ? '${_dataVencimento!.day.toString().padLeft(2, '0')}/${_dataVencimento!.month.toString().padLeft(2, '0')}/${_dataVencimento!.year}'
+                        : 'Selecione uma data',
+                    style: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(
+                        context,
+                        mobile: 13.0,
+                        tablet: 14.0,
+                        desktop: 15.0,
+                      ),
+                    ),
+                  ),
+                  trailing: IconButton(
+                    icon: Icon(
+                      Icons.calendar_today,
+                      size: ResponsiveUtils.getIconSize(
+                        context,
+                        mobile: 20.0,
+                        tablet: 22.0,
+                        desktop: 24.0,
+                      ),
+                    ),
+                    onPressed: _selecionarData,
+                  ),
+                ),
+                SizedBox(height: context.responsiveSpacing(mobile: 8.0)),
+                DropdownButtonFormField<String>(
+                  value: _repeticao,
+                  style: TextStyle(
+                    fontSize: ResponsiveUtils.getFontSize(context),
+                    color: Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Repetição',
+                    labelStyle: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(context),
+                    ),
+                    border: const OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: context.responsiveSpacing(),
+                      vertical: context.responsiveSpacing(
+                        mobile: 12.0,
+                        tablet: 14.0,
+                        desktop: 16.0,
+                      ),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: '1', child: Text('Única vez')),
+                    DropdownMenuItem(value: '2', child: Text('Diária')),
+                    DropdownMenuItem(value: '3', child: Text('Semanal')),
+                    DropdownMenuItem(value: '4', child: Text('Mensal')),
+                    DropdownMenuItem(value: '5', child: Text('Anual')),
+                  ],
+                  onChanged:
+                      widget.fluxo != null
+                          ? null
+                          : (value) {
+                            if (value != null) {
+                              setState(() {
+                                _repeticao = value;
+                                if (value != '1') {
+                                  _numeroParcelas = 2;
+                                  _parcelasController.text = '2';
+                                } else {
+                                  _parcelasController.clear();
+                                }
+                              });
+                            }
+                          },
+                ),
+                SizedBox(height: context.responsiveSpacing()),
+                if (_repeticao != '1' && widget.fluxo == null) ...[
+                  TextFormField(
+                    controller: _parcelasController,
+                    style: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(context),
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Número de Parcelas',
+                      labelStyle: TextStyle(
+                        fontSize: ResponsiveUtils.getFontSize(context),
+                      ),
+                      border: const OutlineInputBorder(),
+                      helperText: 'Mínimo 2 parcelas',
+                      helperStyle: TextStyle(
+                        fontSize: ResponsiveUtils.getFontSize(
+                          context,
+                          mobile: 12.0,
+                          tablet: 13.0,
+                          desktop: 14.0,
+                        ),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: context.responsiveSpacing(),
+                        vertical: context.responsiveSpacing(
+                          mobile: 12.0,
+                          tablet: 14.0,
+                          desktop: 16.0,
+                        ),
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) {
+                      setState(() {
+                        _numeroParcelas = int.tryParse(value) ?? 1;
+                      });
+                    },
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Campo obrigatório';
+                      }
+                      final num = int.tryParse(value);
+                      if (num == null || num < 2) {
+                        return 'Mínimo 2 parcelas';
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: context.responsiveSpacing()),
+                  RadioListTile<bool>(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Valor é da parcela',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFontSize(context),
+                      ),
+                    ),
+                    value: true,
+                    groupValue: _valorEhParcela,
+                    onChanged: (value) {
+                      setState(() {
+                        _valorEhParcela = value ?? true;
+                      });
+                    },
+                  ),
+                  RadioListTile<bool>(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Valor total a dividir',
+                      style: TextStyle(
+                        fontSize: ResponsiveUtils.getFontSize(context),
+                      ),
+                    ),
+                    value: false,
+                    groupValue: _valorEhParcela,
+                    onChanged: (value) {
+                      setState(() {
+                        _valorEhParcela = value ?? true;
+                      });
+                    },
+                  ),
+                  if (!_valorEhParcela && _numeroParcelas > 0)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: context.responsiveSpacing(),
+                      ),
+                      child: Text(
+                        'Valor por parcela: R\$ ${(double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0) / _numeroParcelas}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: ResponsiveUtils.getFontSize(context),
+                          color: Theme.of(context).primaryColor,
+                        ),
+                      ),
+                    ),
+                ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Confirmado',
+                    style: TextStyle(
+                      fontSize: ResponsiveUtils.getFontSize(context),
+                    ),
+                  ),
+                  value: _confirmado,
+                  onChanged: (value) {
+                    setState(() {
+                      _confirmado = value;
+                    });
+                  },
+                ),
               ],
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Confirmado'),
-                value: _confirmado,
-                onChanged: (value) {
-                  setState(() {
-                    _confirmado = value;
-                  });
-                },
-              ),
-            ],
+            ),
           ),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
+          child: Text(
+            'Cancelar',
+            style: TextStyle(fontSize: ResponsiveUtils.getFontSize(context)),
+          ),
         ),
         _isLoading
-            ? const CircularProgressIndicator()
-            : ElevatedButton(onPressed: _save, child: const Text('Salvar')),
+            ? CircularProgressIndicator(
+              strokeWidth: ResponsiveUtils.isMobile(context) ? 3.0 : 4.0,
+            )
+            : ElevatedButton(
+              onPressed: _save,
+              style: ElevatedButton.styleFrom(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.responsiveSpacing(
+                    mobile: 16.0,
+                    tablet: 20.0,
+                    desktop: 24.0,
+                  ),
+                  vertical: context.responsiveSpacing(
+                    mobile: 12.0,
+                    tablet: 14.0,
+                    desktop: 16.0,
+                  ),
+                ),
+              ),
+              child: Text(
+                'Salvar',
+                style: TextStyle(
+                  fontSize: ResponsiveUtils.getFontSize(context),
+                ),
+              ),
+            ),
       ],
     );
   }

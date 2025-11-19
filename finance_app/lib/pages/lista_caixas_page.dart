@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../widgets/charts/caixas_chart_widget.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/shimmer_widgets.dart';
+import '../utils/responsive_utils.dart';
 
 class ListaCaixasPage extends StatefulWidget {
   const ListaCaixasPage({super.key});
@@ -56,11 +57,14 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+              padding: context.responsivePadding(),
               child: Column(
                 children: [
-                  ShimmerWidgets.chartShimmer(context, height: 250),
-                  const SizedBox(height: 16),
+                  ShimmerWidgets.chartShimmer(
+                    context,
+                    height: ResponsiveUtils.getChartHeight(context),
+                  ),
+                  SizedBox(height: context.responsiveSpacing()),
                   ShimmerWidgets.listCaixasShimmer(context),
                 ],
               ),
@@ -73,7 +77,7 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
 
           final caixas = snapshot.data!;
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
+            padding: context.responsivePadding(),
             child: Column(
               children: [
                 CaixasChartWidget(caixas: caixas),

@@ -5,6 +5,7 @@ import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/shimmer_widgets.dart';
+import '../utils/responsive_utils.dart';
 
 class ReceitasPage extends StatefulWidget {
   const ReceitasPage({super.key});
@@ -165,7 +166,7 @@ class _ReceitasPageState extends State<ReceitasPage> {
           final sortedMonthKeys = _getSortedMonthKeys(groupedReceitas);
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16.0),
+            padding: context.responsivePadding(),
             itemCount: sortedMonthKeys.length,
             itemBuilder: (context, index) {
               final monthKey = sortedMonthKeys[index];

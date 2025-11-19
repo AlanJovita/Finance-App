@@ -14,6 +14,7 @@ import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/shimmer_widgets.dart';
+import '../utils/responsive_utils.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -66,7 +67,7 @@ class _DashboardPageState extends State<DashboardPage> {
       try {
         // Tenta obter o id_cliente do GlobalState
         final idCliente = GlobalState().firstIdLoja;
-        if (idCliente != null) {
+        if (idCliente != 0) {
           boletos = await apiService.checkBoletos(idCliente);
         }
       } catch (e) {
@@ -81,46 +82,12 @@ class _DashboardPageState extends State<DashboardPage> {
         _boletos = boletos;
         _isLoading = false;
       });
-
-      // Mostra modal se houver boletos vencidos
-      if (boletos.any((b) => b.isOverdue)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showOverdueBoletosDialog();
-        });
-      }
     } catch (e) {
       setState(() {
         _error = e.toString();
         _isLoading = false;
       });
     }
-  }
-
-  void _showOverdueBoletosDialog() {
-    final boletosVencidos = _boletos.where((b) => b.isOverdue).toList();
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            icon: const Icon(
-              Icons.warning_amber_rounded,
-              color: Colors.red,
-              size: 48,
-            ),
-            title: const Text('Boletos Vencidos'),
-            content: Text(
-              'Você possui ${boletosVencidos.length} boleto(s) vencido(s).\n\n'
-              'Por favor, verifique e regularize sua situação o quanto antes.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Fechar'),
-              ),
-            ],
-          ),
-    );
   }
 
   @override
@@ -186,15 +153,16 @@ class _DashboardPageState extends State<DashboardPage> {
                 onRefresh: _loadData,
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16.0),
+                  padding: context.responsivePadding(),
                   child: Column(
                     children: [
                       _buildMainCard(context, themeProvider),
-                      const SizedBox(height: 16),
+                      SizedBox(height: context.responsiveSpacing()),
                       BoletosWidget(boletos: _boletos),
-                      if (_boletos.isNotEmpty) const SizedBox(height: 16),
+                      if (_boletos.isNotEmpty)
+                        SizedBox(height: context.responsiveSpacing()),
                       _buildActionCardsRow(context),
-                      const SizedBox(height: 16),
+                      SizedBox(height: context.responsiveSpacing()),
                       MonthlyChartsWidget(relatorios: _relatoriosMensais),
                     ],
                   ),

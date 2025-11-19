@@ -20,7 +20,29 @@ class ApiService {
     try {
       final response = await request();
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        return json.decode(response.body) as Map<String, dynamic>;
+        try {
+          return json.decode(response.body) as Map<String, dynamic>;
+        } catch (e) {
+          // Se não conseguir decodificar JSON, pode ser HTML de erro
+          if (response.body.trim().startsWith('<')) {
+            final error = Exception(
+              'O servidor retornou HTML em vez de JSON. O endpoint pode não estar implementado.',
+            );
+            await _logger.logError(
+              'ApiService.$endpoint',
+              error,
+              additionalInfo: {
+                'statusCode': response.statusCode,
+                'responsePreview': response.body.substring(
+                  0,
+                  response.body.length > 200 ? 200 : response.body.length,
+                ),
+              },
+            );
+            throw error;
+          }
+          rethrow;
+        }
       } else {
         // Tenta extrair uma mensagem de erro mais específica do corpo da resposta
         try {
@@ -172,6 +194,7 @@ class ApiService {
         () => http.delete(Uri.parse('$_baseUrl/fluxo/$id/$idLoja/$idRef')),
         'deleteFluxo',
       );
+
       if (response['success'] == true) {
         return response;
       } else {
@@ -232,6 +255,28 @@ class ApiService {
         stackTrace: stackTrace,
       );
       rethrow;
+    }
+  }
+
+  Future<bool> createCategoria(Categoria categoria) async {
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/categoria'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(categoria.toJson()),
+        ),
+        'createCategoria',
+      );
+      return response['success'] == true;
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.createCategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'categoria': categoria.toJson()},
+      );
+      return false;
     }
   }
 
