@@ -231,32 +231,66 @@ class _DashboardPageState extends State<DashboardPage> {
                         ],
                       ),
                       const SizedBox(width: 16),
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => CaixaPage(caixa: caixa),
+                      // Botão Detalhes com efeito neumórfico
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => CaixaPage(caixa: caixa),
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
                             ),
-                          );
-                        },
-                        icon: Icon(
-                          Icons.search,
-                          color: theme.colorScheme.onSurface,
-                          size: 18,
-                        ),
-                        label: Text(
-                          'Detalhes',
-                          style: TextStyle(color: theme.colorScheme.onSurface),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.surface,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            decoration: BoxDecoration(
+                              color: theme.cardColor,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      theme.brightness == Brightness.dark
+                                          ? Colors.black.withOpacity(0.5)
+                                          : Colors.grey.shade400,
+                                  offset: const Offset(4, 4),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                                BoxShadow(
+                                  color:
+                                      theme.brightness == Brightness.dark
+                                          ? Colors.white.withOpacity(0.05)
+                                          : Colors.white,
+                                  offset: const Offset(-4, -4),
+                                  blurRadius: 12,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  color: theme.colorScheme.onSurface,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Detalhes',
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -295,7 +329,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 ],
               ),
             ),
-            // Badge de status como faixa diagonal
+            // Badge de status como faixa diagonal com efeito neumórfico
             Positioned(
               top: 0,
               right: -40,
@@ -309,11 +343,29 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   decoration: BoxDecoration(
                     color: statusAberto ? Colors.green : Colors.red,
+                    // Efeito neumórfico na faixa diagonal
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+                        color:
+                            theme.brightness == Brightness.dark
+                                ? Colors.black.withOpacity(0.9)
+                                : Colors.black.withOpacity(0.5),
+                        blurRadius: 12,
+                        offset: const Offset(4, 4),
+                        spreadRadius: 1,
+                      ),
+                      BoxShadow(
+                        color:
+                            theme.brightness == Brightness.dark
+                                ? statusAberto
+                                    ? Colors.green.shade300.withOpacity(0.2)
+                                    : Colors.red.shade300.withOpacity(0.2)
+                                : statusAberto
+                                ? Colors.green.shade300.withOpacity(0.5)
+                                : Colors.red.shade300.withOpacity(0.5),
+                        blurRadius: 12,
+                        offset: const Offset(-2, -2),
+                        spreadRadius: 1,
                       ),
                     ],
                   ),
@@ -363,6 +415,9 @@ class _DashboardPageState extends State<DashboardPage> {
     double currentValue,
     int? estornados,
   ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     // Calcula percentuais
     final percentMedia =
         media > 0 ? ((currentValue - media) / media * 100) : 0.0;
@@ -376,12 +431,28 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor.withOpacity(0.3),
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
         border:
             isBeatRecord
                 ? Border.all(color: Colors.amber.withOpacity(0.5), width: 2)
                 : null,
+        // Efeito neumórfico com sombras duplas
+        boxShadow: [
+          BoxShadow(
+            color:
+                isDark ? Colors.black.withOpacity(0.6) : Colors.grey.shade400,
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+          BoxShadow(
+            color: isDark ? Colors.white.withOpacity(0.05) : Colors.white,
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
