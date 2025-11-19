@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/shimmer_widgets.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -157,7 +158,7 @@ class _DashboardPageState extends State<DashboardPage> {
       drawer: const AppDrawer(),
       body:
           _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? ShimmerWidgets.dashboardFullShimmer(context)
               : _error != null
               ? Center(
                 child: Column(

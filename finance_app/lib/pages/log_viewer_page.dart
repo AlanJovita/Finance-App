@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/logger_service.dart';
+import '../widgets/shimmer_widgets.dart';
 
 class LogViewerPage extends StatefulWidget {
   const LogViewerPage({super.key});
@@ -153,7 +154,7 @@ class _LogViewerPageState extends State<LogViewerPage> {
       ),
       body:
           _isLoading
-              ? const Center(child: CircularProgressIndicator())
+              ? ShimmerWidgets.genericShimmer(context)
               : _logContent == 'Nenhum log encontrado.'
               ? Center(
                 child: Column(

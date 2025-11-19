@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/shimmer_widgets.dart';
 
 class ReceitasPage extends StatefulWidget {
   const ReceitasPage({super.key});
@@ -142,7 +143,7 @@ class _ReceitasPageState extends State<ReceitasPage> {
         future: _receitasFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return ShimmerWidgets.listFluxosShimmer(context);
           } else if (snapshot.hasError) {
             return Center(child: Text('Erro: ${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {

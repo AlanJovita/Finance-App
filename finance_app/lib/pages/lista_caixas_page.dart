@@ -5,6 +5,7 @@ import '../models/caixa.dart';
 import '../services/api_service.dart';
 import '../widgets/charts/caixas_chart_widget.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/shimmer_widgets.dart';
 
 class ListaCaixasPage extends StatefulWidget {
   const ListaCaixasPage({super.key});
@@ -54,7 +55,16 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
         future: _caixasFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  ShimmerWidgets.chartShimmer(context, height: 250),
+                  const SizedBox(height: 16),
+                  ShimmerWidgets.listCaixasShimmer(context),
+                ],
+              ),
+            );
           } else if (snapshot.hasError) {
             return Center(child: Text('Erro: ${snapshot.error}'));
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
