@@ -409,11 +409,6 @@ class ApiService {
   // Login
   Future<Map<String, dynamic>> login(String user, String password) async {
     try {
-      await _logger.logInfo(
-        'ApiService.login',
-        'Tentando login para usuário: $user',
-      );
-
       final response = await http
           .post(
             Uri.parse('$_baseUrl/login'),
@@ -434,9 +429,9 @@ class ApiService {
         }
 
         await _logger.logInfo(
-          'ApiService.login',
           'Login realizado com sucesso para usuário: $user',
         );
+
         return decodedJson;
       } else {
         throw Exception(

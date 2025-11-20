@@ -33,10 +33,6 @@ class AuthProvider with ChangeNotifier {
         _idLojas = idLojasString.map((i) => int.parse(i)).toList();
         GlobalState().idLojas = _idLojas;
         _isAuthenticated = true;
-        await _logger.logInfo(
-          'AuthProvider._loadUserFromPrefs',
-          'Usuário carregado das preferências: $_user',
-        );
       }
       notifyListeners();
     } catch (e, stackTrace) {
@@ -51,11 +47,6 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> login(String username, String password, bool rememberMe) async {
     try {
-      await _logger.logInfo(
-        'AuthProvider.login',
-        'Tentativa de login para usuário: $username',
-      );
-
       final response = await _apiService.login(username, password);
       if (response['success']) {
         _user = username;
@@ -71,10 +62,6 @@ class AuthProvider with ChangeNotifier {
               ID_LOJAS_KEY,
               _idLojas.map((i) => i.toString()).toList(),
             );
-            await _logger.logInfo(
-              'AuthProvider.login',
-              'Credenciais salvas para lembrar depois',
-            );
           } catch (e, stackTrace) {
             await _logger.logError(
               'AuthProvider.login.savePreferences',
@@ -85,18 +72,10 @@ class AuthProvider with ChangeNotifier {
           }
         }
 
-        await _logger.logInfo(
-          'AuthProvider.login',
-          'Login bem-sucedido para usuário: $username',
-        );
         notifyListeners();
         return true;
       }
 
-      await _logger.logWarning(
-        'AuthProvider.login',
-        'Login falhou - resposta success=false para usuário: $username',
-      );
       return false;
     } catch (e, stackTrace) {
       await _logger.logError(
@@ -111,8 +90,6 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> logout() async {
     try {
-      final userBeforeLogout = _user;
-
       _user = null;
       _idLojas = [];
       GlobalState().idLojas = [];
@@ -122,10 +99,6 @@ class AuthProvider with ChangeNotifier {
       await prefs.remove(USER_KEY);
       await prefs.remove(ID_LOJAS_KEY);
 
-      await _logger.logInfo(
-        'AuthProvider.logout',
-        'Logout realizado para usuário: $userBeforeLogout',
-      );
       notifyListeners();
     } catch (e, stackTrace) {
       await _logger.logError('AuthProvider.logout', e, stackTrace: stackTrace);

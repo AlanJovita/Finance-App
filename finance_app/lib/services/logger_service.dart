@@ -1,16 +1,78 @@
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import 'dart:convert';
+import 'package:finance_app/services/global_state.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import '../models/evento.dart';
+import '../models/erro.dart';
 
 class LoggerService {
   static final LoggerService _instance = LoggerService._internal();
   factory LoggerService() => _instance;
   LoggerService._internal();
 
-  static const String _logFileName = 'finance_app_errors.log';
-  static const int _maxLogSizeBytes = 5 * 1024 * 1024; // 5MB
+  static const String _baseUrl = 'https://api.premiosistemas.com.br';
+  static const String _eventoEndpoint = '/v1.0/evento';
+  static const String _erroEndpoint = '/v1.0/erro';
 
-  /// Registra um erro no arquivo de log
+  /// Envia um evento para o endpoint
+  Future<bool> enviarEvento(Evento evento) async {
+    try {
+      final url = Uri.parse('$_baseUrl$_eventoEndpoint');
+
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(evento.toJson()),
+          )
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Timeout ao enviar evento');
+            },
+          );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Envia um erro para o endpoint
+  Future<bool> enviarErro(Erro erro) async {
+    try {
+      final jsonErro = jsonEncode(erro.toJson());
+      // URL encode para garantir que caracteres especiais sejam tratados corretamente
+      final encodedJson = Uri.encodeComponent(jsonErro);
+      final url = Uri.parse('$_baseUrl$_erroEndpoint/$encodedJson');
+
+      final response = await http
+          .get(url)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw Exception('Timeout ao enviar erro');
+            },
+          );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Registra um erro e envia para o endpoint
   Future<void> logError(
     String source,
     dynamic error, {
@@ -21,73 +83,88 @@ class LoggerService {
       final timestamp = DateFormat(
         'yyyy-MM-dd HH:mm:ss',
       ).format(DateTime.now());
-      final logEntry = _formatLogEntry(
-        timestamp,
-        source,
+
+      // Extrai informações do stack trace
+      String classe = source;
+      String metodo = 'unknown';
+      int linha = 0;
+
+      if (stackTrace != null) {
+        final stackLines = stackTrace.toString().split('\n');
+        if (stackLines.isNotEmpty) {
+          final firstLine = stackLines.first;
+          // Tenta extrair informações da primeira linha do stack trace
+          final match = RegExp(
+            r'#\d+\s+(\w+)\.(\w+)\s+\(.*:(\d+):\d+\)',
+          ).firstMatch(firstLine);
+          if (match != null) {
+            classe = match.group(1) ?? classe;
+            metodo = match.group(2) ?? metodo;
+            linha = int.tryParse(match.group(3) ?? '0') ?? 0;
+          }
+        }
+      }
+
+      final descricao = _formatErrorDescription(
         error,
         stackTrace,
         additionalInfo,
       );
 
-      // Tenta salvar no arquivo
-      await _writeToFile(logEntry);
+      final erro = Erro(
+        idLog: 0,
+        idCliente: GlobalState().firstIdLoja,
+        data: timestamp,
+        descricao: descricao,
+        versao: 'v1.0.0.0',
+        classe: classe,
+        metodo: metodo,
+        linha: linha,
+        qtd: 1,
+        status: 0,
+        classificacao: 0,
+        origem: 10,
+        idUsuarioLocal: 0,
+        idComputadorLocal: 0,
+      );
 
-      // Também imprime no console para debug
-      print('🔴 ERRO REGISTRADO: $source');
-      print(logEntry);
+      await enviarErro(erro);
     } catch (e) {
-      // Se falhar ao salvar o log, apenas imprime no console
-      print('⚠️ Falha ao salvar log: $e');
-      print('Erro original: $error');
+      return;
     }
   }
 
-  /// Registra uma informação no log
-  Future<void> logInfo(String source, String message) async {
+  /// Registra uma informação no log como evento
+  Future<void> logInfo(String message) async {
     try {
       final timestamp = DateFormat(
         'yyyy-MM-dd HH:mm:ss',
       ).format(DateTime.now());
-      final logEntry = '[$timestamp] [INFO] [$source] $message\n\n';
 
-      await _writeToFile(logEntry);
-      print('ℹ️ INFO: $source - $message');
+      final evento = Evento(
+        idCliente: GlobalState().firstIdLoja,
+        data: timestamp,
+        descricao: message,
+        origem: 10,
+        idUsuarioLocal: 0,
+      );
+
+      await enviarEvento(evento);
     } catch (e) {
-      print('⚠️ Falha ao salvar log info: $e');
+      return;
     }
   }
 
-  /// Registra uma advertência no log
-  Future<void> logWarning(String source, String message) async {
-    try {
-      final timestamp = DateFormat(
-        'yyyy-MM-dd HH:mm:ss',
-      ).format(DateTime.now());
-      final logEntry = '[$timestamp] [WARNING] [$source] $message\n\n';
-
-      await _writeToFile(logEntry);
-      print('⚠️ WARNING: $source - $message');
-    } catch (e) {
-      print('⚠️ Falha ao salvar log warning: $e');
-    }
-  }
-
-  /// Formata a entrada do log
-  String _formatLogEntry(
-    String timestamp,
-    String source,
+  /// Formata a descrição do erro
+  String _formatErrorDescription(
     dynamic error,
     StackTrace? stackTrace,
     Map<String, dynamic>? additionalInfo,
   ) {
     final buffer = StringBuffer();
-    buffer.writeln('=' * 80);
-    buffer.writeln('[$timestamp] [ERROR] [$source]');
-    buffer.writeln('-' * 80);
     buffer.writeln('Erro: ${error.toString()}');
 
     if (additionalInfo != null && additionalInfo.isNotEmpty) {
-      buffer.writeln('-' * 80);
       buffer.writeln('Informações Adicionais:');
       additionalInfo.forEach((key, value) {
         buffer.writeln('  $key: $value');
@@ -95,143 +172,48 @@ class LoggerService {
     }
 
     if (stackTrace != null) {
-      buffer.writeln('-' * 80);
       buffer.writeln('Stack Trace:');
-      buffer.writeln(stackTrace.toString());
+      final stackLines = stackTrace.toString().split('\n');
+      // Limita o stack trace para não ficar muito grande
+      final limitedStack = stackLines.take(10).join('\n');
+      buffer.writeln(limitedStack);
     }
-
-    buffer.writeln('=' * 80);
-    buffer.writeln();
 
     return buffer.toString();
   }
 
-  /// Escreve no arquivo de log
-  Future<void> _writeToFile(String content) async {
+  /// Registra um evento customizado
+  Future<void> registrarEvento({
+    required int idCliente,
+    required String descricao,
+    required int origem,
+    required int idUsuarioLocal,
+  }) async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$_logFileName');
+      final timestamp = DateFormat(
+        'yyyy-MM-dd HH:mm:ss',
+      ).format(DateTime.now());
 
-      // Verifica o tamanho do arquivo e limpa se necessário
-      if (await file.exists()) {
-        final size = await file.length();
-        if (size > _maxLogSizeBytes) {
-          await _rotateLogFile(file);
-        }
-      }
-
-      // Adiciona o conteúdo ao arquivo
-      await file.writeAsString(content, mode: FileMode.append, flush: true);
-    } catch (e) {
-      // Falha silenciosa - não queremos que o logging cause problemas
-      print('⚠️ Erro ao escrever no arquivo de log: $e');
-    }
-  }
-
-  /// Rotaciona o arquivo de log quando fica muito grande
-  Future<void> _rotateLogFile(File file) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final backupFile = File(
-        '${directory.path}/finance_app_errors_$timestamp.log',
+      final evento = Evento(
+        idCliente: idCliente,
+        data: timestamp,
+        descricao: descricao,
+        origem: origem,
+        idUsuarioLocal: idUsuarioLocal,
       );
 
-      // Renomeia o arquivo antigo
-      await file.copy(backupFile.path);
-      await file.delete();
-
-      // Mantém apenas os últimos 3 backups
-      await _cleanOldBackups(directory);
+      await enviarEvento(evento);
     } catch (e) {
-      print('⚠️ Erro ao rotacionar arquivo de log: $e');
+      return;
     }
   }
 
-  /// Remove backups antigos mantendo apenas os 3 mais recentes
-  Future<void> _cleanOldBackups(Directory directory) async {
+  /// Registra um erro customizado
+  Future<void> registrarErro(Erro erro) async {
     try {
-      final files =
-          directory
-              .listSync()
-              .where(
-                (f) =>
-                    f is File &&
-                    f.path.contains('finance_app_errors_') &&
-                    f.path.endsWith('.log'),
-              )
-              .map((f) => f as File)
-              .toList();
-
-      if (files.length > 3) {
-        // Ordena por data de modificação (mais antigos primeiro)
-        files.sort(
-          (a, b) => a.statSync().modified.compareTo(b.statSync().modified),
-        );
-
-        // Remove os mais antigos, mantendo apenas 3
-        for (var i = 0; i < files.length - 3; i++) {
-          await files[i].delete();
-        }
-      }
+      await enviarErro(erro);
     } catch (e) {
-      print('⚠️ Erro ao limpar backups antigos: $e');
-    }
-  }
-
-  /// Obtém o caminho do arquivo de log atual
-  Future<String> getLogFilePath() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      return '${directory.path}/$_logFileName';
-    } catch (e) {
-      return 'Erro ao obter caminho do log: $e';
-    }
-  }
-
-  /// Lê o conteúdo do arquivo de log
-  Future<String> readLog() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$_logFileName');
-
-      if (await file.exists()) {
-        return await file.readAsString();
-      } else {
-        return 'Nenhum log encontrado.';
-      }
-    } catch (e) {
-      return 'Erro ao ler arquivo de log: $e';
-    }
-  }
-
-  /// Limpa o arquivo de log
-  Future<void> clearLog() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$_logFileName');
-
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (e) {
-      print('⚠️ Erro ao limpar arquivo de log: $e');
-    }
-  }
-
-  /// Exporta logs para compartilhamento
-  Future<File?> exportLog() async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$_logFileName');
-
-      if (await file.exists()) {
-        return file;
-      }
-      return null;
-    } catch (e) {
-      print('⚠️ Erro ao exportar log: $e');
-      return null;
+      return;
     }
   }
 }
