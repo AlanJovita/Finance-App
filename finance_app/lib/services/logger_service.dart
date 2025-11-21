@@ -10,9 +10,9 @@ class LoggerService {
   factory LoggerService() => _instance;
   LoggerService._internal();
 
-  static const String _baseUrl = 'https://api.premiosistemas.com.br';
-  static const String _eventoEndpoint = '/v1.0/evento';
-  static const String _erroEndpoint = '/v1.0/erro';
+  static const String _baseUrl = 'http://api.premiosistemas.com.br';
+  static const String _eventoEndpoint = '/v1/evento';
+  static const String _erroEndpoint = '/v1/erro';
 
   /// Envia um evento para o endpoint
   Future<bool> enviarEvento(Evento evento) async {
