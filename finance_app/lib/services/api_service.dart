@@ -449,6 +449,48 @@ class ApiService {
     }
   }
 
+  /// Login usando CNPJ (para acesso direto via URL)
+  Future<Map<String, dynamic>> loginByCNPJ(String cnpj) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_baseUrl/login/cnpj'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'cnpj': cnpj}),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () {
+              throw Exception('Tempo esgotado ao tentar conectar ao servidor');
+            },
+          );
+
+      if (response.statusCode == 200) {
+        final decodedJson = json.decode(response.body);
+
+        if (decodedJson['success'] == false) {
+          throw Exception(decodedJson['msg'] ?? 'CNPJ inválido');
+        }
+
+        await _logger.logInfo('Login por CNPJ realizado com sucesso: $cnpj');
+
+        return decodedJson;
+      } else {
+        throw Exception(
+          'Falha ao tentar realizar o login. Status: ${response.statusCode}',
+        );
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.loginByCNPJ',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'cnpj': cnpj, 'baseUrl': _baseUrl},
+      );
+      rethrow;
+    }
+  }
+
   // Boletos
   Future<List<Boleto>> checkBoletos(int idCliente) async {
     try {

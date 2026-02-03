@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 import '../services/global_state.dart';
 import '../services/logger_service.dart';
+import '../services/token_service.dart';
 
 class AuthProvider with ChangeNotifier {
   static const USER_KEY = 'auth_user';
@@ -104,6 +105,59 @@ class AuthProvider with ChangeNotifier {
       await _logger.logError('AuthProvider.logout', e, stackTrace: stackTrace);
       // Não relança o erro para garantir que o estado seja limpo
       rethrow;
+    }
+  }
+
+  Future<bool> loginByToken(String token) async {
+    try {
+      final cnpj = TokenService.decodeToken(token);
+
+      if (cnpj == null || !TokenService.isValidCNPJ(cnpj)) {
+        await _logger.logError(
+          'AuthProvider.loginByToken',
+          Exception('Token inválido'),
+          additionalInfo: {'token': token},
+        );
+        return false;
+      }
+
+      final response = await _apiService.loginByCNPJ(cnpj);
+
+      if (response['success']) {
+        _user = 'CNPJ: $cnpj';
+        _idLojas = List<int>.from(response['data']);
+        GlobalState().idLojas = _idLojas;
+        _isAuthenticated = true;
+
+        // Salva automaticamente quando acessa por token
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(USER_KEY, _user!);
+          await prefs.setStringList(
+            ID_LOJAS_KEY,
+            _idLojas.map((i) => i.toString()).toList(),
+          );
+        } catch (e, stackTrace) {
+          await _logger.logError(
+            'AuthProvider.loginByToken (save prefs)',
+            e,
+            stackTrace: stackTrace,
+          );
+        }
+
+        notifyListeners();
+        return true;
+      }
+
+      return false;
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'AuthProvider.loginByToken',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'token': token},
+      );
+      return false;
     }
   }
 }

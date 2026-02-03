@@ -54,6 +54,34 @@ class MyApp extends StatelessWidget {
                     ),
                   ],
                 ),
+            onGenerateRoute: (settings) {
+              // Captura rotas dinâmicas para tokens
+              if (settings.name != null && settings.name != '/') {
+                final path = settings.name!;
+
+                // Remove a barra inicial
+                final token = path.replaceFirst('/', '');
+
+                // Verifica se é uma rota nomeada conhecida
+                if (token == 'login' ||
+                    token == 'dashboard' ||
+                    token == 'caixas' ||
+                    token == 'receitas' ||
+                    token == 'despesas') {
+                  return null; // Deixa as rotas normais funcionarem
+                }
+
+                // Se não for rota conhecida, trata como token
+                if (token.isNotEmpty) {
+                  return MaterialPageRoute(
+                    builder: (context) => TokenLoginWrapper(token: token),
+                  );
+                }
+              }
+
+              return null;
+            },
+            initialRoute: '/', // Rota inicial
             home: const AuthWrapper(),
             routes: {
               '/login': (context) => const LoginPage(),
@@ -78,6 +106,94 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, auth, child) {
         return auth.isAuthenticated ? const DashboardPage() : const LoginPage();
       },
+    );
+  }
+}
+
+class TokenLoginWrapper extends StatefulWidget {
+  final String token;
+
+  const TokenLoginWrapper({super.key, required this.token});
+
+  @override
+  State<TokenLoginWrapper> createState() => _TokenLoginWrapperState();
+}
+
+class _TokenLoginWrapperState extends State<TokenLoginWrapper> {
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _performTokenLogin();
+  }
+
+  Future<void> _performTokenLogin() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final success = await authProvider.loginByToken(widget.token);
+
+    if (mounted) {
+      if (success) {
+        // Redireciona para o dashboard após login bem-sucedido
+        Navigator.of(context).pushReplacementNamed('/dashboard');
+      } else {
+        setState(() {
+          _error = 'Token inválido ou expirado';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                'Validando acesso...',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Se houver erro, mostra mensagem e botão para login manual
+    return Scaffold(
+      appBar: AppBar(title: const Text('Erro de Acesso')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 24),
+              Text(
+                _error ?? 'Erro desconhecido',
+                style: Theme.of(context).textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pushReplacementNamed('/login');
+                },
+                icon: const Icon(Icons.login),
+                label: const Text('Fazer Login Manual'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
