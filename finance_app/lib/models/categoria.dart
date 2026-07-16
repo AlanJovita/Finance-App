@@ -38,8 +38,12 @@ class Categoria {
   @IdConverter()
   final int? id;
 
-  @JsonKey(name: 'id_loja')
+  /// A API retorna 'id_cliente'; 'id_loja' é aceito como legado no envio.
+  @JsonKey(name: 'id_loja', readValue: _readIdLoja)
   final int idLoja;
+
+  static Object? _readIdLoja(Map json, String key) =>
+      json['id_cliente'] ?? json[key];
 
   final String descricao;
 

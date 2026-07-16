@@ -30,6 +30,6 @@ class TokenService {
   /// Valida se um CNPJ é válido (formato básico)
   static bool isValidCNPJ(String cnpj) {
     final cnpjLimpo = cnpj.replaceAll(RegExp(r'[^\d]'), '');
-    return cnpjLimpo.length == 14;
+    return cnpjLimpo.isNotEmpty;
   }
 }

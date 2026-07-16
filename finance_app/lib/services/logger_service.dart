@@ -4,13 +4,14 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import '../models/evento.dart';
 import '../models/erro.dart';
+import 'api_config.dart';
 
 class LoggerService {
   static final LoggerService _instance = LoggerService._internal();
   factory LoggerService() => _instance;
   LoggerService._internal();
 
-  static const String _baseUrl = 'http://api.premiosistemas.com.br';
+  static const String _baseUrl = apiBaseUrl;
   static const String _eventoEndpoint = '/v1/evento';
   static const String _erroEndpoint = '/v1/erro';
 
@@ -45,16 +46,20 @@ class LoggerService {
     }
   }
 
-  /// Envia um erro para o endpoint
+  /// Envia um erro para o endpoint (POST /v1/erro — a rota não aceita GET)
   Future<bool> enviarErro(Erro erro) async {
     try {
-      final jsonErro = jsonEncode(erro.toJson());
-      // URL encode para garantir que caracteres especiais sejam tratados corretamente
-      final encodedJson = Uri.encodeComponent(jsonErro);
-      final url = Uri.parse('$_baseUrl$_erroEndpoint/$encodedJson');
+      final url = Uri.parse('$_baseUrl$_erroEndpoint');
 
       final response = await http
-          .get(url)
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(erro.toJson()),
+          )
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
@@ -62,11 +67,7 @@ class LoggerService {
             },
           );
 
-      if (response.statusCode == 200) {
-        return true;
-      } else {
-        return false;
-      }
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       return false;
     }

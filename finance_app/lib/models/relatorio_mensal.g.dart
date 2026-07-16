@@ -8,7 +8,7 @@ part of 'relatorio_mensal.dart';
 
 RelatorioMensal _$RelatorioMensalFromJson(Map<String, dynamic> json) =>
     RelatorioMensal(
-      idLoja: (json['id_loja'] as num?)?.toInt(),
+      idLoja: (RelatorioMensal._readIdLoja(json, 'id_loja') as num?)?.toInt(),
       ano: (json['ano'] as num?)?.toInt(),
       mes: (json['mes'] as num?)?.toInt(),
       mediaSaldo: (json['media_saldo'] as num?)?.toDouble(),

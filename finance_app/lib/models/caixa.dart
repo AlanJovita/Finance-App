@@ -135,4 +135,31 @@ class Caixa {
   }
 
   Map<String, dynamic> toJson() => _$CaixaToJson(this);
+
+  /// Payload para POST /finance/caixa: o Caixa.from_dict da api-master só lê
+  /// chaves maiúsculas legadas (DATA_ABERTURA, STATUS_CAIXA...) ou os nomes
+  /// curtos do PDV — as chaves de [toJson] (data_abertura...) não são aceitas.
+  Map<String, dynamic> toApiJson() => {
+    'ID_CLIENTE': idLoja,
+    'ID_CAIXA': idCaixa,
+    'ID_USUARIO': idUsuario,
+    'ID_REF_REPETICAO': idRefRepeticao ?? 0,
+    'TROCO': troco ?? 0.0,
+    'DATA_ABERTURA': dataAbertura?.toIso8601String(),
+    'DATA_FECHAMENTO': dataFechamento?.toIso8601String(),
+    'SALDO': saldo ?? 0.0,
+    'STATUS_CAIXA': statusCaixa ?? 0,
+    'SALDO_DINHEIRO': saldoDinheiro ?? 0.0,
+    'SALDO_CARTAO': saldoCartao ?? 0.0,
+    'SALDO_OUTRAS': saldoOutras ?? 0.0,
+    'SALDO_PIX': saldoPix ?? 0.0,
+    'SALDO_TICKET': saldoTicket ?? 0.0,
+    'SANGRIA': sangria ?? 0.0,
+    'SUPRIMENTO': suprimento ?? 0.0,
+    'SALDO_PX_CAIXA': saldoPxCaixa ?? 0.0,
+    'SALDO_NAO_FATURADO': saldoNaoFaturado ?? 0.0,
+    // Estas duas a API só lê em minúsculas
+    'total_pedido_confirmado': totalPedidoConfirmado ?? 0,
+    'total_pedido_estornado': totalPedidoEstornado ?? 0,
+  };
 }

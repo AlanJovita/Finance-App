@@ -4,8 +4,12 @@ part 'relatorio_semanal.g.dart';
 
 @JsonSerializable()
 class RelatorioSemanal {
-  @JsonKey(name: 'id_loja')
+  /// A API retorna 'id_cliente'; 'id_loja' é aceito como legado.
+  @JsonKey(name: 'id_loja', readValue: _readIdLoja)
   final int? idLoja;
+
+  static Object? _readIdLoja(Map json, String key) =>
+      json['id_cliente'] ?? json[key];
 
   @JsonKey(name: 'dia_semana')
   final int? diaSemana;

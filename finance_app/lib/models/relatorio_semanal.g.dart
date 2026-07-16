@@ -8,7 +8,7 @@ part of 'relatorio_semanal.dart';
 
 RelatorioSemanal _$RelatorioSemanalFromJson(Map<String, dynamic> json) =>
     RelatorioSemanal(
-      idLoja: (json['id_loja'] as num?)?.toInt(),
+      idLoja: (RelatorioSemanal._readIdLoja(json, 'id_loja') as num?)?.toInt(),
       diaSemana: (json['dia_semana'] as num?)?.toInt(),
       mediaSaldo: (json['media_saldo'] as num?)?.toDouble(),
       mediaPedidosConfirmados:

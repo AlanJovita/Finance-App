@@ -74,7 +74,7 @@ class FluxoCaixa {
     try {
       return FluxoCaixa(
         id: _safeCast<int>(json['id']),
-        idLoja: _safeCast<int>(json['id_loja']),
+        idLoja: _safeCast<int>(json['id_cliente'] ?? json['id_loja']),
         idCategoria: _safeCast<int>(json['id_categoria']),
         descricao: _safeString(json['descricao']),
         valor: _safeCast<double>(json['valor']),
@@ -108,9 +108,10 @@ class FluxoCaixa {
     var date = DateTime.tryParse(dateStr);
     if (date != null) return date;
 
-    // Tenta fazer parse do formato "d-M-yyyy" ou "dd-MM-yyyy"
+    // Tenta fazer parse dos formatos "d-M-yyyy" ou "d/M/yyyy"
+    // (a API retorna datas como "d/M/yyyy")
     try {
-      final parts = dateStr.split('-');
+      final parts = dateStr.split(dateStr.contains('/') ? '/' : '-');
       if (parts.length == 3) {
         final day = int.parse(parts[0]);
         final month = int.parse(parts[1]);

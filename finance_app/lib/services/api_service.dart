@@ -6,11 +6,12 @@ import '../models/caixa.dart';
 import '../models/relatorio_mensal.dart';
 import '../models/relatorio_semanal.dart';
 import '../models/boleto.dart';
+import 'api_config.dart';
 import 'global_state.dart';
 import 'logger_service.dart';
 
 class ApiService {
-  final String _baseUrl = 'https://finance-api.premiosistemas.com.br';
+  final String _baseUrl = apiBaseUrl;
   final _logger = LoggerService();
 
   Future<Map<String, dynamic>> _handleRequest(
@@ -89,11 +90,17 @@ class ApiService {
   Future<FluxoCaixa> getFluxo(int id) async {
     try {
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/fluxo/$id')),
+        () => http.get(Uri.parse('$_baseUrl/finance/fluxo/$id')),
         'getFluxo',
       );
       if (response['success'] == true) {
-        return FluxoCaixa.fromJson(response['data']);
+        // A API retorna data como lista (mesmo para busca por id)
+        final data = response['data'];
+        final item = data is List ? (data.isEmpty ? null : data.first) : data;
+        if (item == null) {
+          throw Exception('Fluxo não encontrado.');
+        }
+        return FluxoCaixa.fromJson(item as Map<String, dynamic>);
       } else {
         throw Exception(response['msg'] ?? 'Erro ao buscar fluxo.');
       }
@@ -113,7 +120,8 @@ class ApiService {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/fluxo/list/$idLoja/$where')),
+        () =>
+            http.get(Uri.parse('$_baseUrl/finance/fluxo/list/$idLoja/$where')),
         'listFluxos',
       );
 
@@ -136,11 +144,15 @@ class ApiService {
 
   Future<Map<String, dynamic>> createFluxo(FluxoCaixa fluxo) async {
     try {
+      // A API rejeita id nulo (int(None) no from_dict); envia 0 na criação
+      final body = fluxo.toJson();
+      body['id'] ??= 0;
+
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$_baseUrl/fluxo'),
+          Uri.parse('$_baseUrl/finance/fluxo'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(fluxo.toJson()),
+          body: json.encode(body),
         ),
         'createFluxo',
       );
@@ -164,7 +176,7 @@ class ApiService {
     try {
       final response = await _handleRequest(
         () => http.put(
-          Uri.parse('$_baseUrl/fluxo'),
+          Uri.parse('$_baseUrl/finance/fluxo'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode(fluxo.toJson()),
         ),
@@ -191,7 +203,9 @@ class ApiService {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.delete(Uri.parse('$_baseUrl/fluxo/$id/$idLoja/$idRef')),
+        () => http.delete(
+          Uri.parse('$_baseUrl/finance/fluxo/$id/$idLoja/$idRef'),
+        ),
         'deleteFluxo',
       );
 
@@ -215,7 +229,7 @@ class ApiService {
   Future<Categoria> getCategoria(int id) async {
     try {
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/categoria/$id')),
+        () => http.get(Uri.parse('$_baseUrl/finance/categoria/$id')),
         'getCategoria',
       );
       if (response['success'] == true) {
@@ -239,7 +253,7 @@ class ApiService {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/categoria/list/$idLoja')),
+        () => http.get(Uri.parse('$_baseUrl/finance/categoria/list/$idLoja')),
         'listCategorias',
       );
       if (response['success'] == true) {
@@ -262,7 +276,7 @@ class ApiService {
     try {
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$_baseUrl/categoria'),
+          Uri.parse('$_baseUrl/finance/categoria'),
           headers: {'Content-Type': 'application/json'},
           body: json.encode(categoria.toJson()),
         ),
@@ -281,22 +295,29 @@ class ApiService {
   }
 
   // Endpoints de Caixa
-  Future<Caixa> getCaixa() async {
+  /// Retorna null quando a loja ainda não possui nenhum caixa registrado
+  /// (a API responde success:false com msg vazia nesse caso).
+  Future<Caixa?> getCaixa() async {
     try {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/caixa/$idLoja')),
+        () => http.get(Uri.parse('$_baseUrl/finance/caixa/$idLoja')),
         'getCaixa',
       );
 
+      final data = response['data'];
       if (response['success'] == true) {
-        if (response['data'] == null) {
-          throw Exception('Caixa não encontrado para a loja $idLoja.');
+        if (data == null || data is! Map<String, dynamic>) {
+          return null;
         }
-        return Caixa.fromJson(response['data']);
+        return Caixa.fromJson(data);
       } else {
-        throw Exception(response['msg'] ?? 'Erro ao buscar caixa.');
+        final msg = response['msg']?.toString() ?? '';
+        if (msg.isEmpty) {
+          return null;
+        }
+        throw Exception(msg);
       }
     } catch (e, stackTrace) {
       await _logger.logError('ApiService.getCaixa', e, stackTrace: stackTrace);
@@ -309,7 +330,7 @@ class ApiService {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/caixas/$idLoja')),
+        () => http.get(Uri.parse('$_baseUrl/finance/caixas/$idLoja')),
         'getCaixas',
       );
 
@@ -331,9 +352,11 @@ class ApiService {
 
       final response = await _handleRequest(
         () => http.post(
-          Uri.parse('$_baseUrl/caixa/$idLoja'),
+          Uri.parse('$_baseUrl/finance/caixa/$idLoja'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(caixa.toJson()),
+          // Caixa.from_dict da API não lê as chaves de toJson (data_abertura,
+          // status_caixa...); usa o formato legado de toApiJson
+          body: json.encode(caixa.toApiJson()),
         ),
         'updateCaixa',
       );
@@ -359,7 +382,8 @@ class ApiService {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/caixa/mensal/$idLoja/$ano')),
+        () =>
+            http.get(Uri.parse('$_baseUrl/finance/caixa/mensal/$idLoja/$ano')),
         'getRelatorioMensal',
       );
 
@@ -386,7 +410,7 @@ class ApiService {
       final idLoja = GlobalState().firstIdLoja;
 
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/caixa/semanal/$idLoja')),
+        () => http.get(Uri.parse('$_baseUrl/finance/caixa/semanal/$idLoja')),
         'getRelatorioSemanal',
       );
 
@@ -411,7 +435,7 @@ class ApiService {
     try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/login'),
+            Uri.parse('$_baseUrl/finance/login'),
             headers: {'Content-Type': 'application/json'},
             body: json.encode({'login': user, 'senha': password}),
           )
@@ -454,7 +478,7 @@ class ApiService {
     try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/login/cnpj'),
+            Uri.parse('$_baseUrl/finance/login/cnpj'),
             headers: {'Content-Type': 'application/json'},
             body: json.encode({'cnpj': cnpj}),
           )
@@ -465,9 +489,16 @@ class ApiService {
             },
           );
 
-      if (response.statusCode == 200) {
-        final decodedJson = json.decode(response.body);
+      // A API responde erros com status != 200 (ex.: 404 para CNPJ não
+      // encontrado) mas sempre envia a mensagem no corpo — usa ela quando existir
+      Map<String, dynamic>? decodedJson;
+      try {
+        decodedJson = json.decode(response.body) as Map<String, dynamic>;
+      } catch (_) {
+        decodedJson = null;
+      }
 
+      if (response.statusCode == 200 && decodedJson != null) {
         if (decodedJson['success'] == false) {
           throw Exception(decodedJson['msg'] ?? 'CNPJ inválido');
         }
@@ -477,7 +508,8 @@ class ApiService {
         return decodedJson;
       } else {
         throw Exception(
-          'Falha ao tentar realizar o login. Status: ${response.statusCode}',
+          decodedJson?['msg'] ??
+              'Falha ao tentar realizar o login. Status: ${response.statusCode}',
         );
       }
     } catch (e, stackTrace) {

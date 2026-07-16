@@ -11,7 +11,7 @@ Categoria _$CategoriaFromJson(Map<String, dynamic> json) => Categoria(
     json['id'],
     const IdConverter().fromJson,
   ),
-  idLoja: (json['id_loja'] as num).toInt(),
+  idLoja: (Categoria._readIdLoja(json, 'id_loja') as num).toInt(),
   descricao: json['descricao'] as String,
   ativado: const AtivadoConverter().fromJson(json['ativado']),
   tipoFluxo: (json['tipo_fluxo'] as num).toInt(),
