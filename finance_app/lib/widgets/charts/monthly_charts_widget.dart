@@ -2,6 +2,8 @@ import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/relatorio_mensal.dart';
+import '../../utils/app_colors_extension.dart';
+import '../../utils/app_tokens.dart';
 
 class MonthlyChartsWidget extends StatefulWidget {
   final List<RelatorioMensal> relatorios;
@@ -59,7 +61,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
 
   Widget _buildSaldoChart(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final cores = context.appColors;
 
     return Card(
       elevation: 4.0,
@@ -95,9 +97,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                         touchTooltipData: LineTouchTooltipData(
                           getTooltipColor:
                               (touchedSpot) =>
-                                  isDark
-                                      ? Colors.grey[800]!
-                                      : Colors.grey[100]!,
+                                  theme.colorScheme.surfaceContainerHighest,
                           getTooltipItems: (touchedSpots) {
                             return touchedSpots.map((spot) {
                               final relatorio =
@@ -106,7 +106,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                               return LineTooltipItem(
                                 '${relatorio.nomeMesAbreviado}\n',
                                 TextStyle(
-                                  color: isDark ? Colors.white : Colors.black,
+                                  color: theme.colorScheme.onSurface,
                                   fontWeight: FontWeight.bold,
                                 ),
                                 children: [
@@ -174,32 +174,25 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                         horizontalInterval: _getMaxSaldo() / 5,
                         getDrawingHorizontalLine: (value) {
                           return FlLine(
-                            color:
-                                isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                            color: theme.dividerColor,
                             strokeWidth: 1,
                           );
                         },
                       ),
                       borderData: FlBorderData(show: false),
-                      lineBarsData: _buildSaldoLineData(isDark),
+                      lineBarsData: _buildSaldoLineData(context),
                     ),
                   );
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem(
-                  'Soma',
-                  isDark ? const Color(0xFFBB86FC) : const Color(0xFF6200EA),
-                ),
-                const SizedBox(width: 24),
-                _buildLegendItem(
-                  'Média (linha tracejada)',
-                  isDark ? Colors.orange[300]! : Colors.orange,
-                ),
+                _buildLegendItem('Soma', cores.series1),
+                const SizedBox(width: AppSpacing.xl),
+                _buildLegendItem('Média (linha tracejada)', cores.series2),
               ],
             ),
           ],
@@ -210,7 +203,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
 
   Widget _buildPedidosChart(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final cores = context.appColors;
 
     return Card(
       elevation: 4.0,
@@ -246,9 +239,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                         touchTooltipData: LineTouchTooltipData(
                           getTooltipColor:
                               (touchedSpot) =>
-                                  isDark
-                                      ? Colors.grey[800]!
-                                      : Colors.grey[100]!,
+                                  theme.colorScheme.surfaceContainerHighest,
                           getTooltipItems: (touchedSpots) {
                             return touchedSpots.map((spot) {
                               final relatorio =
@@ -264,7 +255,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                               return LineTooltipItem(
                                 '${relatorio.nomeMesAbreviado}\n',
                                 TextStyle(
-                                  color: isDark ? Colors.white : Colors.black,
+                                  color: theme.colorScheme.onSurface,
                                   fontWeight: FontWeight.bold,
                                 ),
                                 children: [
@@ -330,37 +321,27 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
                         horizontalInterval: _getMaxPedidos() / 5,
                         getDrawingHorizontalLine: (value) {
                           return FlLine(
-                            color:
-                                isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                            color: theme.dividerColor,
                             strokeWidth: 1,
                           );
                         },
                       ),
                       borderData: FlBorderData(show: false),
-                      lineBarsData: _buildPedidosLineData(isDark),
+                      lineBarsData: _buildPedidosLineData(context),
                     ),
                   );
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem(
-                  'Total',
-                  isDark ? const Color(0xFF03DAC6) : const Color(0xFF018786),
-                ),
-                const SizedBox(width: 16),
-                _buildLegendItem(
-                  'Média',
-                  isDark ? Colors.amber[300]! : Colors.amber[700]!,
-                ),
-                const SizedBox(width: 16),
-                _buildLegendItem(
-                  'Estornados',
-                  isDark ? Colors.red[300]! : Colors.red[700]!,
-                ),
+                _buildLegendItem('Total', cores.series1),
+                const SizedBox(width: AppSpacing.lg),
+                _buildLegendItem('Média', cores.series2),
+                const SizedBox(width: AppSpacing.lg),
+                _buildLegendItem('Estornados', cores.series3),
               ],
             ),
           ],
@@ -380,13 +361,80 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(width: AppSpacing.sm),
+        // A tinta do rótulo é de texto; a identidade da série é o traço ao lado.
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
       ],
     );
   }
 
-  List<LineChartBarData> _buildSaldoLineData(bool isDark) {
+  /// A série principal: traço grosso, ponto com anel da cor da superfície e um
+  /// véu da própria cor por baixo.
+  LineChartBarData _buildLinhaPrincipal(
+    ThemeData theme,
+    List<FlSpot> spots,
+    Color cor,
+  ) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: cor,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: FlDotData(
+        show: true,
+        getDotPainter: (spot, percent, barData, index) {
+          return FlDotCirclePainter(
+            radius: 4,
+            color: cor,
+            strokeWidth: 2,
+            strokeColor: theme.colorScheme.surfaceContainerHighest,
+          );
+        },
+      ),
+      belowBarData: BarAreaData(
+        show: true,
+        gradient: LinearGradient(
+          colors: [cor.withValues(alpha: 0.3), cor.withValues(alpha: 0.0)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+    );
+  }
+
+  /// Uma série secundária: traço fino, sem véu. O tracejado marca a linha de
+  /// referência (a média), que é um limiar e não uma medição.
+  LineChartBarData _buildLinhaSecundaria(
+    ThemeData theme,
+    List<FlSpot> spots,
+    Color cor, {
+    bool tracejada = false,
+  }) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: cor,
+      barWidth: 2,
+      isStrokeCapRound: true,
+      dashArray: tracejada ? [5, 5] : null,
+      dotData: FlDotData(
+        show: true,
+        getDotPainter: (spot, percent, barData, index) {
+          return FlDotCirclePainter(
+            radius: 3,
+            color: cor,
+            strokeWidth: tracejada ? 1 : 2,
+            strokeColor: theme.colorScheme.surfaceContainerHighest,
+          );
+        },
+      ),
+    );
+  }
+
+  List<LineChartBarData> _buildSaldoLineData(BuildContext context) {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
     final animationValue = _animation.value;
 
     // Calcular a média dos saldos
@@ -415,62 +463,14 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
     );
 
     return [
-      // Linha principal com área preenchida
-      LineChartBarData(
-        spots: somaSpots,
-        isCurved: true,
-        color: isDark ? const Color(0xFFBB86FC) : const Color(0xFF6200EA),
-        barWidth: 3,
-        isStrokeCapRound: true,
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 4,
-              color: isDark ? const Color(0xFFBB86FC) : const Color(0xFF6200EA),
-              strokeWidth: 2,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-        belowBarData: BarAreaData(
-          show: true,
-          gradient: LinearGradient(
-            colors: [
-              (isDark ? const Color(0xFFBB86FC) : const Color(0xFF6200EA))
-                  .withOpacity(0.3),
-              (isDark ? const Color(0xFFBB86FC) : const Color(0xFF6200EA))
-                  .withOpacity(0.0),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-      ),
-      // Linha da média
-      LineChartBarData(
-        spots: mediaSpots,
-        isCurved: true,
-        color: isDark ? Colors.orange[300] : Colors.orange,
-        barWidth: 2,
-        isStrokeCapRound: true,
-        dashArray: [5, 5],
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 3,
-              color: isDark ? Colors.orange[300]! : Colors.orange,
-              strokeWidth: 1,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-      ),
+      _buildLinhaPrincipal(theme, somaSpots, cores.series1),
+      _buildLinhaSecundaria(theme, mediaSpots, cores.series2, tracejada: true),
     ];
   }
 
-  List<LineChartBarData> _buildPedidosLineData(bool isDark) {
+  List<LineChartBarData> _buildPedidosLineData(BuildContext context) {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
     final animationValue = _animation.value;
 
     // Calcular a média dos pedidos confirmados
@@ -508,77 +508,12 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
     );
 
     return [
-      // Linha principal com área preenchida
-      LineChartBarData(
-        spots: totalSpots,
-        isCurved: true,
-        color: isDark ? const Color(0xFF03DAC6) : const Color(0xFF018786),
-        barWidth: 3,
-        isStrokeCapRound: true,
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 4,
-              color: isDark ? const Color(0xFF03DAC6) : const Color(0xFF018786),
-              strokeWidth: 2,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-        belowBarData: BarAreaData(
-          show: true,
-          gradient: LinearGradient(
-            colors: [
-              (isDark ? const Color(0xFF03DAC6) : const Color(0xFF018786))
-                  .withOpacity(0.3),
-              (isDark ? const Color(0xFF03DAC6) : const Color(0xFF018786))
-                  .withOpacity(0.0),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-      ),
-      // Linha da média
-      LineChartBarData(
-        spots: mediaSpots,
-        isCurved: true,
-        color: isDark ? Colors.amber[300] : Colors.amber[700],
-        barWidth: 2,
-        isStrokeCapRound: true,
-        dashArray: [5, 5],
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 3,
-              color: isDark ? Colors.amber[300]! : Colors.amber[700]!,
-              strokeWidth: 1,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-      ),
-      // Linha dos estornados
-      LineChartBarData(
-        spots: estornadosSpots,
-        isCurved: true,
-        color: isDark ? Colors.red[300] : Colors.red[700],
-        barWidth: 2,
-        isStrokeCapRound: true,
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 3,
-              color: isDark ? Colors.red[300]! : Colors.red[700]!,
-              strokeWidth: 2,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-      ),
+      _buildLinhaPrincipal(theme, totalSpots, cores.series1),
+      _buildLinhaSecundaria(theme, mediaSpots, cores.series2, tracejada: true),
+      // Estornados pediam vermelho, mas o vermelho de erro fica em ΔE 8.7 da
+      // série magenta no tema escuro — indistinguíveis. Fica na terceira série,
+      // que é validada contra as outras duas; quem nomeia é a legenda.
+      _buildLinhaSecundaria(theme, estornadosSpots, cores.series3),
     ];
   }
 

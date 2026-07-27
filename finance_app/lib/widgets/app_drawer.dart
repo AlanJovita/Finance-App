@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../utils/app_colors_extension.dart';
+import '../utils/app_tokens.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -32,7 +34,7 @@ class AppDrawer extends StatelessWidget {
             ),
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(24.0),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -45,14 +47,14 @@ class AppDrawer extends StatelessWidget {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 12,
                             offset: const Offset(0, 4),
                           ),
                         ],
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(16.0),
+                        padding: const EdgeInsets.all(AppSpacing.lg),
                         child: Image.asset(
                           'assets/images/logo.png',
                           fit: BoxFit.contain,
@@ -66,7 +68,7 @@ class AppDrawer extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     Text(
                       'Finance App',
                       style: theme.textTheme.headlineSmall?.copyWith(
@@ -74,11 +76,11 @@ class AppDrawer extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Controle Financeiro',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                       ),
                     ),
                   ],
@@ -92,7 +94,7 @@ class AppDrawer extends StatelessWidget {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _buildMenuItem(
                   context,
                   icon: Icons.dashboard,
@@ -110,16 +112,20 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.arrow_upward,
                   title: 'Receitas',
                   route: '/receitas',
-                  iconColor: Colors.green,
+                  iconColor: context.appColors.success,
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.arrow_downward,
                   title: 'Despesas',
                   route: '/despesas',
-                  iconColor: Colors.red,
+                  iconColor: context.appColors.error,
                 ),
-                const Divider(height: 32, indent: 16, endIndent: 16),
+                const Divider(
+                  height: AppSpacing.xxl,
+                  indent: AppSpacing.lg,
+                  endIndent: AppSpacing.lg,
+                ),
 
                 // Toggle de tema
                 ListTile(
@@ -127,10 +133,7 @@ class AppDrawer extends StatelessWidget {
                     isDark ? Icons.dark_mode : Icons.light_mode,
                     color: theme.colorScheme.onSurface,
                   ),
-                  title: Text(
-                    isDark ? 'Tema Escuro' : 'Tema Claro',
-                    style: TextStyle(color: theme.colorScheme.onSurface),
-                  ),
+                  title: Text(isDark ? 'Tema Escuro' : 'Tema Claro'),
                   trailing: Switch(
                     value: isDark,
                     onChanged: (_) => themeProvider.toggleTheme(),
@@ -146,7 +149,7 @@ class AppDrawer extends StatelessWidget {
           const Divider(height: 1),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
@@ -159,7 +162,7 @@ class AppDrawer extends StatelessWidget {
                   backgroundColor: theme.colorScheme.error,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
                 ),
               ),
@@ -182,20 +185,22 @@ class AppDrawer extends StatelessWidget {
     final isSelected = currentRoute == route;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color:
             isSelected
-                ? theme.colorScheme.primary.withOpacity(0.1)
+                ? theme.colorScheme.primary.withValues(alpha: 0.1)
                 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: ListTile(
         leading: Icon(icon, color: iconColor ?? theme.colorScheme.onSurface),
         title: Text(
           title,
-          style: TextStyle(
-            color: theme.colorScheme.onSurface,
+          style: theme.textTheme.bodyLarge?.copyWith(
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -207,7 +212,9 @@ class AppDrawer extends StatelessWidget {
                   color: theme.colorScheme.primary,
                 )
                 : null,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
         onTap: () {
           if (currentRoute != route) {
             Navigator.pop(context);

@@ -6,6 +6,8 @@ import '../services/api_service.dart';
 import '../widgets/charts/caixas_chart_widget.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/shimmer_widgets.dart';
+import '../utils/app_colors_extension.dart';
+import '../utils/app_tokens.dart';
 import '../utils/responsive_utils.dart';
 
 class ListaCaixasPage extends StatefulWidget {
@@ -46,9 +48,6 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Lista de Caixas')),
       drawer: const AppDrawer(),
@@ -81,192 +80,159 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
             child: Column(
               children: [
                 CaixasChartWidget(caixas: caixas),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: caixas.length,
-                  itemBuilder: (context, index) {
-                    final caixa = caixas[index];
-                    final animation = Tween<Offset>(
-                      begin: const Offset(0, 0.3),
-                      end: Offset.zero,
-                    ).animate(
-                      CurvedAnimation(
-                        parent: _animationController,
-                        curve: Interval(
-                          (index / caixas.length) * 0.5,
-                          ((index + 1) / caixas.length) * 0.5 + 0.5,
-                          curve: Curves.easeOutCubic,
-                        ),
-                      ),
-                    );
-
-                    final fadeAnimation = Tween<double>(
-                      begin: 0.0,
-                      end: 1.0,
-                    ).animate(
-                      CurvedAnimation(
-                        parent: _animationController,
-                        curve: Interval(
-                          (index / caixas.length) * 0.5,
-                          ((index + 1) / caixas.length) * 0.5 + 0.5,
-                          curve: Curves.easeIn,
-                        ),
-                      ),
-                    );
-
-                    return SlideTransition(
-                      position: animation,
-                      child: FadeTransition(
-                        opacity: fadeAnimation,
-                        child: Card(
-                          elevation: 4,
-                          shadowColor: Colors.black.withOpacity(0.2),
-                          margin: const EdgeInsets.only(bottom: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12.0,
-                              vertical: 8.0,
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // Status - Lock Icon in circular card
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        caixa.statusCaixa == 1
-                                            ? (isDark
-                                                    ? Colors.green[300]
-                                                    : Colors.green[600])!
-                                                .withOpacity(0.15)
-                                            : (isDark
-                                                    ? Colors.red[300]
-                                                    : Colors.red[600])!
-                                                .withOpacity(0.15),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    caixa.statusCaixa == 1
-                                        ? Icons.lock_open
-                                        : Icons.lock,
-                                    size: 18,
-                                    color:
-                                        caixa.statusCaixa == 1
-                                            ? (isDark
-                                                ? Colors.green[300]
-                                                : Colors.green[600])
-                                            : (isDark
-                                                ? Colors.red[300]
-                                                : Colors.red[600]),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Data
-                                const Icon(
-                                  Icons.calendar_today,
-                                  size: 16,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  caixa.dataAbertura != null
-                                      ? '${caixa.dataAbertura!.day.toString().padLeft(2, '0')}/${caixa.dataAbertura!.month.toString().padLeft(2, '0')}'
-                                      : 'N/A',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                                const Spacer(),
-                                // Saldo
-                                Icon(
-                                  Icons.account_balance_wallet,
-                                  size: 16,
-                                  color:
-                                      isDark
-                                          ? Colors.green[300]
-                                          : Colors.green[600],
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  CurrencyFormatter.format(caixa.saldo),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color:
-                                        isDark
-                                            ? Colors.green[300]
-                                            : Colors.green[600],
-                                  ),
-                                ),
-                                const Spacer(),
-                                // Pedidos
-                                Icon(
-                                  Icons.receipt,
-                                  size: 16,
-                                  color:
-                                      isDark
-                                          ? Colors.blue[300]
-                                          : Colors.blue[600],
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${caixa.totalPedidoConfirmado ?? 0}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color:
-                                        isDark
-                                            ? Colors.blue[300]
-                                            : Colors.blue[600],
-                                  ),
-                                ),
-                                const Spacer(),
-                                // Botão de ação
-                                Material(
-                                  color: Colors.orange,
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: InkWell(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder:
-                                              (context) =>
-                                                  CaixaPage(caixa: caixa),
-                                        ),
-                                      );
-                                    },
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      child: const Icon(
-                                        Icons.search,
-                                        size: 20,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+                  itemBuilder:
+                      (context, index) =>
+                          _buildCaixaAnimado(caixas[index], index, caixas.length),
                 ),
               ],
             ),
           );
         },
       ),
+    );
+  }
+
+  Widget _buildCaixaAnimado(Caixa caixa, int index, int total) {
+    final inicio = (index / total) * 0.5;
+    final fim = ((index + 1) / total) * 0.5 + 0.5;
+
+    final slide = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Interval(inicio, fim, curve: Curves.easeOutCubic),
+      ),
+    );
+
+    final fade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Interval(inicio, fim, curve: Curves.easeIn),
+      ),
+    );
+
+    return SlideTransition(
+      position: slide,
+      child: FadeTransition(opacity: fade, child: _buildCaixa(caixa)),
+    );
+  }
+
+  Widget _buildCaixa(Caixa caixa) {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+    final aberto = caixa.statusCaixa == 1;
+    final corStatus = aberto ? cores.success : cores.error;
+
+    return Card(
+      elevation: AppElevation.cardRaised,
+      shadowColor: Colors.black.withValues(alpha: 0.2),
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: corStatus.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                aberto ? Icons.lock_open : Icons.lock,
+                size: 18,
+                color: corStatus,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            _buildDado(
+              icone: Icons.calendar_today,
+              texto:
+                  caixa.dataAbertura != null
+                      ? '${caixa.dataAbertura!.day.toString().padLeft(2, '0')}/${caixa.dataAbertura!.month.toString().padLeft(2, '0')}'
+                      : 'N/A',
+              cor: theme.colorScheme.onSurfaceVariant,
+            ),
+            const Spacer(),
+            _buildDado(
+              icone: Icons.account_balance_wallet,
+              texto: CurrencyFormatter.format(caixa.saldo),
+              cor: cores.success,
+              destaque: true,
+            ),
+            const Spacer(),
+            _buildDado(
+              icone: Icons.receipt,
+              texto: '${caixa.totalPedidoConfirmado ?? 0}',
+              cor: cores.info,
+              destaque: true,
+            ),
+            const Spacer(),
+            // Abrir o caixa é a ação da linha: usa o azul da marca, e não uma
+            // cor avulsa. O laranja anterior não alcançava contraste com o
+            // ícone branco em cima.
+            Material(
+              color: theme.colorScheme.primary,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CaixaPage(caixa: caixa),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  child: Icon(
+                    Icons.search,
+                    size: 20,
+                    color: theme.colorScheme.onPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDado({
+    required IconData icone,
+    required String texto,
+    required Color cor,
+    bool destaque = false,
+  }) {
+    final theme = Theme.of(context);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icone, size: 16, color: cor),
+        const SizedBox(width: AppSpacing.xs),
+        Text(
+          texto,
+          style: (destaque
+                  ? theme.textTheme.titleSmall
+                  : theme.textTheme.bodySmall)
+              ?.copyWith(color: cor),
+        ),
+      ],
     );
   }
 }

@@ -2,6 +2,8 @@ import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/caixa.dart';
+import '../../utils/app_colors_extension.dart';
+import '../../utils/app_tokens.dart';
 
 class CaixasChartWidget extends StatefulWidget {
   final List<Caixa> caixas;
@@ -49,14 +51,16 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
     }
 
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final cores = context.appColors;
 
     return Card(
       elevation: 0,
       color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -74,9 +78,7 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
                         touchTooltipData: LineTouchTooltipData(
                           getTooltipColor:
                               (touchedSpot) =>
-                                  isDark
-                                      ? Colors.grey[800]!
-                                      : Colors.grey[100]!,
+                                  theme.colorScheme.surfaceContainerHighest,
                           getTooltipItems: (touchedSpots) {
                             return touchedSpots.map((spot) {
                               // Usar caixasFechados ao invés de widget.caixas
@@ -96,7 +98,7 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
                                 return LineTooltipItem(
                                   '${_formatDate(caixa.dataFechamento)}\n',
                                   TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
+                                    color: theme.colorScheme.onSurface,
                                     fontWeight: FontWeight.bold,
                                   ),
                                   children: [
@@ -139,32 +141,25 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
                         horizontalInterval: _getMaxSaldo() / 5,
                         getDrawingHorizontalLine: (value) {
                           return FlLine(
-                            color:
-                                isDark ? Colors.grey[800]! : Colors.grey[300]!,
+                            color: theme.dividerColor,
                             strokeWidth: 1,
                           );
                         },
                       ),
                       borderData: FlBorderData(show: false),
-                      lineBarsData: _buildLineData(isDark),
+                      lineBarsData: _buildLineData(context),
                     ),
                   );
                 },
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _buildLegendItem(
-                  'Faturamento',
-                  isDark ? Colors.green[300]! : Colors.green[600]!,
-                ),
-                const SizedBox(width: 24),
-                _buildLegendItem(
-                  'Pedidos',
-                  isDark ? Colors.blue[300]! : Colors.blue[600]!,
-                ),
+                _buildLegendItem('Faturamento', cores.series2),
+                const SizedBox(width: AppSpacing.xl),
+                _buildLegendItem('Pedidos', cores.series1),
               ],
             ),
           ],
@@ -184,13 +179,16 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(width: AppSpacing.sm),
+        // A tinta do rótulo é de texto; a identidade da série é o traço ao lado.
+        Text(label, style: Theme.of(context).textTheme.labelMedium),
       ],
     );
   }
 
-  List<LineChartBarData> _buildLineData(bool isDark) {
+  List<LineChartBarData> _buildLineData(BuildContext context) {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
     final animationValue = _animation.value;
 
     // Filtrar apenas caixas fechados (status_caixa == 1)
@@ -229,71 +227,47 @@ class _CaixasChartWidgetState extends State<CaixasChartWidget>
     );
 
     return [
-      // Linha de saldo
-      LineChartBarData(
-        spots: saldoSpots,
-        isCurved: true,
-        color: isDark ? Colors.green[300] : Colors.green[600],
-        barWidth: 3,
-        isStrokeCapRound: true,
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 4,
-              color: isDark ? Colors.green[300]! : Colors.green[600]!,
-              strokeWidth: 2,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-        belowBarData: BarAreaData(
-          show: true,
-          gradient: LinearGradient(
-            colors: [
-              (isDark ? Colors.green[300]! : Colors.green[600]!).withOpacity(
-                0.3,
-              ),
-              (isDark ? Colors.green[300]! : Colors.green[600]!).withOpacity(
-                0.0,
-              ),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-      ),
-      // Linha de pedidos confirmados
-      LineChartBarData(
-        spots: pedidosSpots,
-        isCurved: true,
-        color: isDark ? Colors.blue[300] : Colors.blue[600],
-        barWidth: 3,
-        isStrokeCapRound: true,
-        dotData: FlDotData(
-          show: true,
-          getDotPainter: (spot, percent, barData, index) {
-            return FlDotCirclePainter(
-              radius: 4,
-              color: isDark ? Colors.blue[300]! : Colors.blue[600]!,
-              strokeWidth: 2,
-              strokeColor: isDark ? Colors.grey[900]! : Colors.white,
-            );
-          },
-        ),
-        belowBarData: BarAreaData(
-          show: true,
-          gradient: LinearGradient(
-            colors: [
-              (isDark ? Colors.blue[300]! : Colors.blue[600]!).withOpacity(0.3),
-              (isDark ? Colors.blue[300]! : Colors.blue[600]!).withOpacity(0.0),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-      ),
+      _buildLinha(theme, saldoSpots, cores.series2),
+      _buildLinha(theme, pedidosSpots, cores.series1),
     ];
+  }
+
+  /// Uma série do gráfico: traço fino, ponto com anel da cor da superfície e
+  /// um véu da própria cor por baixo da linha.
+  LineChartBarData _buildLinha(
+    ThemeData theme,
+    List<FlSpot> spots,
+    Color cor,
+  ) {
+    return LineChartBarData(
+      spots: spots,
+      isCurved: true,
+      color: cor,
+      barWidth: 3,
+      isStrokeCapRound: true,
+      dotData: FlDotData(
+        show: true,
+        getDotPainter: (spot, percent, barData, index) {
+          return FlDotCirclePainter(
+            radius: 4,
+            color: cor,
+            strokeWidth: 2,
+            strokeColor: theme.colorScheme.surfaceContainerHighest,
+          );
+        },
+      ),
+      belowBarData: BarAreaData(
+        show: true,
+        gradient: LinearGradient(
+          colors: [
+            cor.withValues(alpha: 0.3),
+            cor.withValues(alpha: 0.0),
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+      ),
+    );
   }
 
   double _getMaxSaldo() {

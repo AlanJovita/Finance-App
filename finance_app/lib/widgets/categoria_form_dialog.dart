@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/categoria.dart';
 import '../services/api_service.dart';
 import '../services/global_state.dart';
+import '../utils/app_colors_extension.dart';
+import '../utils/app_tokens.dart';
 import '../utils/responsive_utils.dart';
 
 /// Dialog para criar nova categoria
@@ -32,11 +34,11 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
         content: Row(
           children: [
             const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: context.appColors.error,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ),
@@ -67,16 +69,14 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
             // Mostrar mensagem de sucesso
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Row(
+                content: const Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.white),
-                    const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text('Categoria criada com sucesso!'),
-                    ),
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: AppSpacing.sm),
+                    Expanded(child: Text('Categoria criada com sucesso!')),
                   ],
                 ),
-                backgroundColor: Colors.green.shade700,
+                backgroundColor: context.appColors.success,
                 behavior: SnackBarBehavior.floating,
                 duration: const Duration(seconds: 2),
               ),
@@ -123,23 +123,11 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
             ? 400.0
             : 450.0;
 
+    // Sem estilo nem padding por campo: o `inputDecorationTheme` do tema já
+    // cuida disso para o app inteiro.
     return AlertDialog(
-      title: Text(
-        'Nova Categoria',
-        style: TextStyle(
-          fontSize: ResponsiveUtils.getFontSize(
-            context,
-            mobile: 18.0,
-            tablet: 20.0,
-            desktop: 22.0,
-          ),
-        ),
-      ),
-      contentPadding: context.responsivePadding(
-        mobile: 16.0,
-        tablet: 20.0,
-        desktop: 24.0,
-      ),
+      title: const Text('Nova Categoria'),
+      contentPadding: context.responsivePadding(),
       content: SizedBox(
         width: dialogWidth,
         child: Form(
@@ -150,32 +138,9 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
               TextFormField(
                 controller: _descricaoController,
                 autofocus: true,
-                style: TextStyle(
-                  fontSize: ResponsiveUtils.getFontSize(context),
-                ),
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Nome da Categoria',
-                  labelStyle: TextStyle(
-                    fontSize: ResponsiveUtils.getFontSize(context),
-                  ),
-                  border: const OutlineInputBorder(),
                   helperText: 'Mínimo 3 caracteres',
-                  helperStyle: TextStyle(
-                    fontSize: ResponsiveUtils.getFontSize(
-                      context,
-                      mobile: 12.0,
-                      tablet: 13.0,
-                      desktop: 14.0,
-                    ),
-                  ),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: context.responsiveSpacing(),
-                    vertical: context.responsiveSpacing(
-                      mobile: 12.0,
-                      tablet: 14.0,
-                      desktop: 16.0,
-                    ),
-                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -194,61 +159,18 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-          child: Text(
-            'Cancelar',
-            style: TextStyle(fontSize: ResponsiveUtils.getFontSize(context)),
-          ),
+          child: const Text('Cancelar'),
         ),
         _isLoading
-            ? Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.responsiveSpacing(
-                  mobile: 16.0,
-                  tablet: 20.0,
-                  desktop: 24.0,
-                ),
-              ),
+            ? const Padding(
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.xl),
               child: SizedBox(
-                width: ResponsiveUtils.getIconSize(
-                  context,
-                  mobile: 20.0,
-                  tablet: 22.0,
-                  desktop: 24.0,
-                ),
-                height: ResponsiveUtils.getIconSize(
-                  context,
-                  mobile: 20.0,
-                  tablet: 22.0,
-                  desktop: 24.0,
-                ),
-                child: CircularProgressIndicator(
-                  strokeWidth: ResponsiveUtils.isMobile(context) ? 3.0 : 4.0,
-                ),
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 3.0),
               ),
             )
-            : ElevatedButton(
-              onPressed: _salvar,
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.responsiveSpacing(
-                    mobile: 16.0,
-                    tablet: 20.0,
-                    desktop: 24.0,
-                  ),
-                  vertical: context.responsiveSpacing(
-                    mobile: 12.0,
-                    tablet: 14.0,
-                    desktop: 16.0,
-                  ),
-                ),
-              ),
-              child: Text(
-                'Salvar',
-                style: TextStyle(
-                  fontSize: ResponsiveUtils.getFontSize(context),
-                ),
-              ),
-            ),
+            : ElevatedButton(onPressed: _salvar, child: const Text('Salvar')),
       ],
     );
   }

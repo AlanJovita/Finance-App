@@ -3,6 +3,18 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/caixa.dart';
+import '../utils/app_colors_extension.dart';
+import '../utils/app_tokens.dart';
+
+/// Um meio de pagamento com o que é preciso para desenhá-lo: o gráfico, a
+/// legenda e a lista de detalhes saem todos desta mesma lista, em vez de cada
+/// um repetir a paleta por conta própria.
+typedef _MetodoPagamento = ({
+  String label,
+  IconData icone,
+  double valor,
+  Color cor,
+});
 
 class CaixaPage extends StatelessWidget {
   final Caixa caixa;
@@ -29,266 +41,102 @@ class CaixaPage extends StatelessWidget {
     return days[weekday - 1];
   }
 
+  /// A ordem desta lista é a ordem das fatias no anel, e as cores vizinhas aqui
+  /// são as vizinhas lá. A separação entre vizinhas é o que sustenta a leitura
+  /// sob daltonismo — a ordem foi validada junto com a paleta em [AppColors].
+  List<_MetodoPagamento> _metodos(AppColors cores) {
+    final cartao = caixa.saldoCartao ?? 0;
+
+    return [
+      (
+        label: 'Dinheiro',
+        icone: Icons.account_balance_wallet,
+        valor: caixa.saldoDinheiro ?? 0,
+        cor: cores.paymentDinheiro,
+      ),
+      // A API devolve o cartão somado; a divisão 60/40 entre crédito e débito é
+      // uma estimativa fixa, não um dado real vindo do caixa.
+      (
+        label: 'Crédito',
+        icone: Icons.credit_card,
+        valor: cartao * 0.6,
+        cor: cores.paymentCredito,
+      ),
+      (
+        label: 'Débito',
+        icone: Icons.credit_card,
+        valor: cartao * 0.4,
+        cor: cores.paymentDebito,
+      ),
+      (
+        label: 'PIX',
+        icone: Icons.pix,
+        valor: caixa.saldoPix ?? 0,
+        cor: cores.paymentPix,
+      ),
+      (
+        label: 'Ticket',
+        icone: Icons.confirmation_number,
+        valor: caixa.saldoTicket ?? 0,
+        cor: cores.paymentTicket,
+      ),
+      (
+        label: 'Outros',
+        icone: Icons.more_horiz,
+        valor: caixa.saldoOutras ?? 0,
+        cor: cores.paymentOutras,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    // Calcula o total para o gráfico
-    final total =
-        (caixa.saldoDinheiro ?? 0) +
-        (caixa.saldoCartao ?? 0) +
-        (caixa.saldoPix ?? 0) +
-        (caixa.saldoTicket ?? 0) +
-        (caixa.saldoOutras ?? 0);
+    final cores = context.appColors;
+    final metodos = _metodos(cores);
+    final total = metodos.fold<double>(0, (soma, m) => soma + m.valor);
 
     return Scaffold(
-      backgroundColor: isDark ? null : Colors.grey[100],
-      appBar: AppBar(title: Text('Caixa #${caixa.idCaixa}'), elevation: 0),
+      appBar: AppBar(title: Text('Caixa #${caixa.idCaixa}')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           children: [
-            // Card de Informações de Abertura/Fechamento
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildInfoCard(
-                        context,
-                        icon: Icons.login,
-                        label: 'Abertura',
-                        value: _formatDateTime(caixa.dataAbertura),
-                        color: Colors.green,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildInfoCard(
-                        context,
-                        icon: Icons.logout,
-                        label: 'Fechamento',
-                        value: _formatDateTime(caixa.dataFechamento),
-                        color: Colors.red,
-                      ),
-                    ),
-                  ],
-                ),
+            _buildAberturaFechamento(context),
+            const SizedBox(height: AppSpacing.lg),
+            _buildGrafico(context, metodos, total),
+            const SizedBox(height: AppSpacing.lg),
+            _buildDetalhes(context, metodos),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAberturaFechamento(BuildContext context) {
+    final cores = context.appColors;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildInfoCard(
+                context,
+                icon: Icons.login,
+                label: 'Abertura',
+                value: _formatDateTime(caixa.dataAbertura),
+                color: cores.success,
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Card com Gráfico Circular
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  children: [
-                    // Total no centro
-                    Text(
-                      CurrencyFormatter.format(total),
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Total de Pagamentos',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Gráfico Donut
-                    SizedBox(
-                      height: 220,
-                      child:
-                          total > 0
-                              ? PieChart(
-                                PieChartData(
-                                  sectionsSpace: 2,
-                                  centerSpaceRadius: 60,
-                                  sections: _buildPieChartSections(isDark),
-                                  pieTouchData: PieTouchData(
-                                    touchCallback:
-                                        (
-                                          FlTouchEvent event,
-                                          pieTouchResponse,
-                                        ) {},
-                                  ),
-                                ),
-                              )
-                              : Center(
-                                child: Text(
-                                  'Sem dados',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Legenda (somente valores > 0)
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 12,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        if ((caixa.saldoDinheiro ?? 0) > 0)
-                          _buildLegendItem(
-                            'Dinheiro',
-                            const Color(0xFF4CAF50),
-                            caixa.saldoDinheiro ?? 0,
-                          ),
-                        if ((caixa.saldoCartao ?? 0) * 0.6 > 0)
-                          _buildLegendItem(
-                            'Crédito',
-                            const Color(0xFFFF6B9D),
-                            (caixa.saldoCartao ?? 0) * 0.6,
-                          ),
-                        if ((caixa.saldoCartao ?? 0) * 0.4 > 0)
-                          _buildLegendItem(
-                            'Débito',
-                            const Color(0xFF2196F3),
-                            (caixa.saldoCartao ?? 0) * 0.4,
-                          ),
-                        if ((caixa.saldoPix ?? 0) > 0)
-                          _buildLegendItem(
-                            'PIX',
-                            const Color(0xFF00BCD4),
-                            caixa.saldoPix ?? 0,
-                          ),
-                        if ((caixa.saldoTicket ?? 0) > 0)
-                          _buildLegendItem(
-                            'Ticket',
-                            const Color(0xFFFF9800),
-                            caixa.saldoTicket ?? 0,
-                          ),
-                        if ((caixa.saldoOutras ?? 0) > 0)
-                          _buildLegendItem(
-                            'Outros',
-                            const Color(0xFF9E9E9E),
-                            caixa.saldoOutras ?? 0,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Lista de Informações
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  // Cabeçalho
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[800] : Colors.grey[100],
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(16),
-                        topRight: Radius.circular(16),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.receipt_long, color: theme.primaryColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Detalhes do Caixa',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Lista de itens
-                  _buildListItem(
-                    context,
-                    icon: Icons.account_balance_wallet,
-                    label: 'Dinheiro',
-                    value: caixa.saldoDinheiro ?? 0,
-                    color: const Color(0xFF4CAF50),
-                  ),
-                  _buildListItem(
-                    context,
-                    icon: Icons.credit_card,
-                    label: 'Crédito',
-                    value: (caixa.saldoCartao ?? 0) * 0.6,
-                    color: const Color(0xFFFF6B9D),
-                  ),
-                  _buildListItem(
-                    context,
-                    icon: Icons.credit_card,
-                    label: 'Débito',
-                    value: (caixa.saldoCartao ?? 0) * 0.4,
-                    color: const Color(0xFF2196F3),
-                  ),
-                  _buildListItem(
-                    context,
-                    icon: Icons.pix,
-                    label: 'PIX',
-                    value: caixa.saldoPix ?? 0,
-                    color: const Color(0xFF00BCD4),
-                  ),
-                  _buildListItem(
-                    context,
-                    icon: Icons.confirmation_number,
-                    label: 'Ticket',
-                    value: caixa.saldoTicket ?? 0,
-                    color: const Color(0xFFFF9800),
-                  ),
-                  _buildListItem(
-                    context,
-                    icon: Icons.more_horiz,
-                    label: 'Outros',
-                    value: caixa.saldoOutras ?? 0,
-                    color: const Color(0xFF9E9E9E),
-                  ),
-                  const Divider(height: 1),
-                  _buildListItem(
-                    context,
-                    icon: Icons.remove_circle_outline,
-                    label: 'Sangria',
-                    value: caixa.sangria ?? 0,
-                    color: Colors.red,
-                    isNegative: true,
-                  ),
-                  _buildListItem(
-                    context,
-                    icon: Icons.attach_money,
-                    label: 'Troco',
-                    value: caixa.troco ?? 0,
-                    color: Colors.grey,
-                  ),
-                  const Divider(height: 1, thickness: 2),
-                  _buildListItem(
-                    context,
-                    icon: Icons.account_balance,
-                    label: 'Saldo Final',
-                    value: caixa.saldo ?? 0,
-                    color: Colors.green,
-                    isBold: true,
-                  ),
-                ],
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: _buildInfoCard(
+                context,
+                icon: Icons.logout,
+                label: 'Fechamento',
+                value: _formatDateTime(caixa.dataFechamento),
+                color: cores.error,
               ),
             ),
           ],
@@ -297,140 +145,177 @@ class CaixaPage extends StatelessWidget {
     );
   }
 
-  List<PieChartSectionData> _buildPieChartSections(bool isDark) {
-    final dinheiro = caixa.saldoDinheiro ?? 0;
-    final cartao = caixa.saldoCartao ?? 0;
-    final pix = caixa.saldoPix ?? 0;
-    final ticket = caixa.saldoTicket ?? 0;
-    final outras = caixa.saldoOutras ?? 0;
+  Widget _buildGrafico(
+    BuildContext context,
+    List<_MetodoPagamento> metodos,
+    double total,
+  ) {
+    final theme = Theme.of(context);
+    final comValor = metodos.where((m) => m.valor > 0).toList();
 
-    // Divide cartão em crédito (60%) e débito (40%)
-    final credito = cartao * 0.6;
-    final debito = cartao * 0.4;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          children: [
+            Text(
+              CurrencyFormatter.format(total),
+              style: theme.textTheme.headlineMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Total de Pagamentos',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
 
-    final total = dinheiro + cartao + pix + ticket + outras;
-
-    if (total == 0) return [];
-
-    final sections = <PieChartSectionData>[];
-
-    if (dinheiro > 0) {
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF4CAF50),
-          value: dinheiro,
-          title: '${((dinheiro / total) * 100).toStringAsFixed(0)}%',
-          radius: 50,
-          titleStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+            SizedBox(
+              height: 220,
+              child:
+                  total > 0
+                      ? PieChart(
+                        PieChartData(
+                          // 2px de superfície entre as fatias separa sem
+                          // precisar de borda em volta de cada uma.
+                          sectionsSpace: 2,
+                          centerSpaceRadius: 60,
+                          sections: [
+                            for (final m in comValor)
+                              PieChartSectionData(
+                                color: m.cor,
+                                value: m.valor,
+                                showTitle: false,
+                                radius: 50,
+                              ),
+                          ],
+                        ),
+                      )
+                      : Center(
+                        child: Text(
+                          'Sem dados',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+            ),
+            if (comValor.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xl),
+              // A legenda carrega nome, valor e percentual. O percentual ficava
+              // escrito em branco dentro da fatia, onde não alcançava contraste
+              // legível e ainda sumia nas fatias finas.
+              Wrap(
+                spacing: AppSpacing.lg,
+                runSpacing: AppSpacing.md,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final m in comValor)
+                    _buildLegendItem(context, m, m.valor / total),
+                ],
+              ),
+            ],
+          ],
         ),
-      );
-    }
-
-    if (credito > 0) {
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFFFF6B9D),
-          value: credito,
-          title: '${((credito / total) * 100).toStringAsFixed(0)}%',
-          radius: 50,
-          titleStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    if (debito > 0) {
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF2196F3),
-          value: debito,
-          title: '${((debito / total) * 100).toStringAsFixed(0)}%',
-          radius: 50,
-          titleStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    if (pix > 0) {
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF00BCD4),
-          value: pix,
-          title: '${((pix / total) * 100).toStringAsFixed(0)}%',
-          radius: 50,
-          titleStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    if (ticket > 0) {
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFFFF9800),
-          value: ticket,
-          title: '${((ticket / total) * 100).toStringAsFixed(0)}%',
-          radius: 50,
-          titleStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    if (outras > 0) {
-      sections.add(
-        PieChartSectionData(
-          color: const Color(0xFF9E9E9E),
-          value: outras,
-          title: '${((outras / total) * 100).toStringAsFixed(0)}%',
-          radius: 50,
-          titleStyle: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-      );
-    }
-
-    return sections;
+      ),
+    );
   }
 
-  Widget _buildLegendItem(String label, Color color, double value) {
+  Widget _buildDetalhes(BuildContext context, List<_MetodoPagamento> metodos) {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+
+    return Card(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: _fillSutil(theme),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(AppRadius.lg),
+                topRight: Radius.circular(AppRadius.lg),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long, color: theme.colorScheme.primary),
+                const SizedBox(width: AppSpacing.sm),
+                Text('Detalhes do Caixa', style: theme.textTheme.titleMedium),
+              ],
+            ),
+          ),
+
+          for (final m in metodos)
+            _buildListItem(
+              context,
+              icon: m.icone,
+              label: m.label,
+              value: m.valor,
+              color: m.cor,
+            ),
+
+          const Divider(height: 1),
+          _buildListItem(
+            context,
+            icon: Icons.remove_circle_outline,
+            label: 'Sangria',
+            value: caixa.sangria ?? 0,
+            color: cores.error,
+            isNegative: true,
+          ),
+          _buildListItem(
+            context,
+            icon: Icons.attach_money,
+            label: 'Troco',
+            value: caixa.troco ?? 0,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const Divider(height: 1, thickness: 2),
+          _buildListItem(
+            context,
+            icon: Icons.account_balance,
+            label: 'Saldo Final',
+            value: caixa.saldo ?? 0,
+            color: cores.success,
+            isBold: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Um véu sobre a superfície do card, para destacar um bloco sem inventar uma
+  /// cor por modo.
+  Color _fillSutil(ThemeData theme) =>
+      theme.colorScheme.onSurface.withValues(alpha: 0.05);
+
+  Widget _buildLegendItem(
+    BuildContext context,
+    _MetodoPagamento metodo,
+    double fracao,
+  ) {
+    final theme = Theme.of(context);
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           width: 12,
           height: 12,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: metodo.cor, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: AppSpacing.sm),
+        // O texto usa tinta de texto; quem carrega a identidade da fatia é o
+        // ponto colorido ao lado.
+        Text(metodo.label, style: theme.textTheme.labelMedium),
+        const SizedBox(width: AppSpacing.xs),
         Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          CurrencyFormatter.format(value),
-          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+          '${CurrencyFormatter.format(metodo.valor)} · ${(fracao * 100).toStringAsFixed(0)}%',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -446,41 +331,41 @@ class CaixaPage extends StatelessWidget {
     bool isBold = false,
   }) {
     final theme = Theme.of(context);
+    final cores = context.appColors;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    final valueColor =
+        isNegative
+            ? cores.error
+            : (isBold ? cores.success : theme.textTheme.bodyLarge?.color);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(AppSpacing.sm),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                fontSize: isBold ? 16 : 14,
-                fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-              ),
+              style: isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium,
             ),
           ),
           Text(
             CurrencyFormatter.format(value),
-            style: TextStyle(
-              fontSize: isBold ? 18 : 15,
-              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color:
-                  isNegative
-                      ? Colors.red
-                      : (isBold
-                          ? Colors.green
-                          : theme.textTheme.bodyLarge?.color),
-            ),
+            style: (isBold
+                    ? theme.textTheme.titleLarge
+                    : theme.textTheme.titleSmall)
+                ?.copyWith(color: valueColor),
           ),
         ],
       ),
@@ -495,13 +380,12 @@ class CaixaPage extends StatelessWidget {
     required Color color,
   }) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: isDark ? Colors.grey[800] : Colors.grey[100],
-        borderRadius: BorderRadius.circular(12),
+        color: _fillSutil(theme),
+        borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -509,26 +393,17 @@ class CaixaPage extends StatelessWidget {
           Row(
             children: [
               Icon(icon, size: 18, color: color),
-              const SizedBox(width: 6),
+              const SizedBox(width: AppSpacing.xs),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey[600],
-            ),
-          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(value, style: theme.textTheme.titleSmall),
         ],
       ),
     );

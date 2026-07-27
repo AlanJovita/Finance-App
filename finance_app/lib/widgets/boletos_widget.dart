@@ -2,11 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../models/boleto.dart';
+import '../utils/app_colors_extension.dart';
+import '../utils/app_tokens.dart';
 
 enum BoletoStatus {
-  pendente, // Verde - vence em dias futuros
-  venceHoje, // Laranja - vence hoje
-  vencido, // Vermelho - já passou da data
+  pendente, // vence em dias futuros
+  venceHoje, // vence hoje
+  vencido; // já passou da data
+
+  String get rotulo => switch (this) {
+    BoletoStatus.vencido => 'VENCIDO',
+    BoletoStatus.venceHoje => 'VENCE HOJE',
+    BoletoStatus.pendente => 'PENDENTE',
+  };
+
+  String get titulo => switch (this) {
+    BoletoStatus.vencido => 'Boleto Vencido',
+    BoletoStatus.venceHoje => 'Vence Hoje',
+    BoletoStatus.pendente => 'Boleto em aberto',
+  };
+
+  String get mensagem => switch (this) {
+    BoletoStatus.vencido =>
+      'Efetue o pagamento o quanto antes para evitar bloqueio',
+    _ => 'Efetue o pagamento clicando no link abaixo',
+  };
+
+  IconData get icone => switch (this) {
+    BoletoStatus.vencido => Icons.error_outline,
+    BoletoStatus.venceHoje => Icons.warning_amber_outlined,
+    BoletoStatus.pendente => Icons.receipt_long_outlined,
+  };
+
+  /// Três degraus de urgência crescente na escala de status.
+  Color cor(AppColors cores) => switch (this) {
+    BoletoStatus.vencido => cores.error,
+    BoletoStatus.venceHoje => cores.serious,
+    BoletoStatus.pendente => cores.warning,
+  };
 }
 
 class BoletosWidget extends StatefulWidget {
@@ -78,16 +111,17 @@ class _BoletosWidgetState extends State<BoletosWidget> {
     }
 
     return Card(
-      elevation: 8.0,
-      shadowColor: Colors.black.withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: AppElevation.overlay,
+      shadowColor: Colors.black.withValues(alpha: 0.3),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cabeçalho
             Row(
               children: [
                 Icon(
@@ -95,21 +129,19 @@ class _BoletosWidgetState extends State<BoletosWidget> {
                   color: theme.colorScheme.primary,
                   size: 28,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Boletos em Aberto',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: theme.textTheme.titleMedium,
                       ),
                       Text(
                         '$boletosVencidos vencido(s) • $boletosPendentes pendente(s)',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.grey,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -117,16 +149,15 @@ class _BoletosWidgetState extends State<BoletosWidget> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
 
-            // Lista de boletos em linha
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children:
-                  widget.boletos
-                      .map((boleto) => _buildBoletoCard(context, boleto))
-                      .toList(),
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (final boleto in widget.boletos)
+                  _buildBoletoCard(context, boleto),
+              ],
             ),
           ],
         ),
@@ -136,102 +167,80 @@ class _BoletosWidgetState extends State<BoletosWidget> {
 
   Widget _buildBoletoCard(BuildContext context, Boleto boleto) {
     final theme = Theme.of(context);
+    final cores = context.appColors;
     final isDark = theme.brightness == Brightness.dark;
     final status = _getBoletoStatus(boleto);
-    final dateFormat = DateFormat('dd/MM/yyyy');
-    final dueDate = dateFormat.format(boleto.dueDateParsed);
-
-    // Cores baseadas no status
-    Color statusColor;
-    String statusText;
-
-    switch (status) {
-      case BoletoStatus.vencido:
-        statusColor = Colors.red;
-        statusText = 'VENCIDO';
-        break;
-      case BoletoStatus.venceHoje:
-        statusColor = Colors.orange;
-        statusText = 'VENCE HOJE';
-        break;
-      case BoletoStatus.pendente:
-        statusColor = Colors.yellow.shade700;
-        statusText = 'PENDENTE';
-        break;
-    }
+    final statusColor = status.cor(cores);
+    final dueDate = DateFormat('dd/MM/yyyy').format(boleto.dueDateParsed);
 
     return InkWell(
       onTap: () => _openBoleto(context, boleto.invoiceUrl, status),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
         width: 180,
         height: 100,
         decoration: BoxDecoration(
-          color: isDark ? Colors.grey[850] : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: theme.cardColor,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           boxShadow: [
             // Sombra externa (neumorfismo)
             BoxShadow(
               color:
-                  isDark ? Colors.black.withOpacity(0.5) : Colors.grey.shade400,
+                  isDark
+                      ? Colors.black.withValues(alpha: 0.5)
+                      : Colors.grey.shade400,
               offset: const Offset(6, 6),
               blurRadius: 12,
-              spreadRadius: 0,
             ),
             // Luz (neumorfismo)
             BoxShadow(
               color:
                   isDark
-                      ? Colors.grey.shade900.withOpacity(0.3)
-                      : Colors.white.withOpacity(0.9),
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.white.withValues(alpha: 0.9),
               offset: const Offset(-6, -6),
               blurRadius: 12,
-              spreadRadius: 0,
             ),
           ],
         ),
         child: Stack(
           children: [
-            // Efeito de linhas pontilhadas (serrilhado do boleto)
+            // Serrilhado do boleto
             Positioned(
               left: 0,
               right: 0,
               top: 30,
               child: CustomPaint(
                 size: const Size(double.infinity, 1),
-                painter: _DashedLinePainter(
-                  color: isDark ? Colors.grey[700]! : Colors.grey.shade300,
-                ),
+                painter: _DashedLinePainter(color: theme.dividerColor),
               ),
             ),
 
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Cabeçalho - Ícone de código de barras
                   Row(
                     children: [
                       Icon(
                         Icons.qr_code_2,
-                        color: isDark ? Colors.grey[400] : Colors.grey[700],
+                        color: theme.colorScheme.onSurfaceVariant,
                         size: 18,
                       ),
                       const Spacer(),
-                      // Badge de status
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: AppSpacing.sm,
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
                           color: statusColor,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Text(
-                          statusText,
-                          style: const TextStyle(
+                          status.rotulo,
+                          style: theme.textTheme.labelSmall?.copyWith(
                             color: Colors.white,
                             fontSize: 9,
                             fontWeight: FontWeight.bold,
@@ -242,25 +251,21 @@ class _BoletosWidgetState extends State<BoletosWidget> {
                     ],
                   ),
                   const Spacer(),
-                  // Data de vencimento
                   Text(
                     'Vencimento',
-                    style: TextStyle(
+                    style: theme.textTheme.labelSmall?.copyWith(
                       fontSize: 10,
-                      color: isDark ? Colors.grey[500] : Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     dueDate,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                    style: theme.textTheme.titleSmall?.copyWith(
                       color: statusColor,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   // Código de barras simulado
                   Row(
                     children: List.generate(
@@ -270,7 +275,9 @@ class _BoletosWidgetState extends State<BoletosWidget> {
                           height: 12,
                           margin: EdgeInsets.only(right: index < 7 ? 2 : 0),
                           decoration: BoxDecoration(
-                            color: isDark ? Colors.grey[700] : Colors.grey[800],
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
                             borderRadius: BorderRadius.circular(1),
                           ),
                         ),
@@ -287,127 +294,21 @@ class _BoletosWidgetState extends State<BoletosWidget> {
   }
 
   void _openBoleto(BuildContext context, String url, BoletoStatus status) {
-    // Definir cor e mensagem baseado no status
-    Color statusColor;
-    String statusTitle;
-    String statusMessage;
-    IconData statusIcon;
-
-    switch (status) {
-      case BoletoStatus.vencido:
-        statusColor = Colors.red;
-        statusTitle = 'Boleto Vencido';
-        statusMessage =
-            'Efetue o pagamento o quanto antes para evitar bloqueio';
-        statusIcon = Icons.error_outline;
-        break;
-      case BoletoStatus.venceHoje:
-        statusColor = Colors.orange;
-        statusTitle = 'Vence Hoje';
-        statusMessage = 'Efetue o pagamento clicando no link abaixo';
-        statusIcon = Icons.warning_amber_outlined;
-        break;
-      case BoletoStatus.pendente:
-        statusColor = Colors.yellow.shade700;
-        statusTitle = 'Boleto em aberto';
-        statusMessage = 'Efetue o pagamento clicando no link abaixo';
-        statusIcon = Icons.receipt_long_outlined;
-        break;
-    }
+    final cores = context.appColors;
+    final statusColor = status.cor(cores);
 
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
-            icon: Icon(statusIcon, color: statusColor, size: 48),
-            title: Text(statusTitle, style: TextStyle(color: statusColor)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  statusMessage,
-                  style: const TextStyle(fontSize: 14),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text(
-                  'Clique no botão abaixo para copiar o link do boleto:',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                // Container com URL
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.link, color: Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          url,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Botão de Copiar
-                ElevatedButton(
-                  onPressed: () async {
-                    await Clipboard.setData(ClipboardData(text: url));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.white),
-                              SizedBox(width: 8),
-                              Text(
-                                'Link copiado para a área de transferência!',
-                              ),
-                            ],
-                          ),
-                          backgroundColor: statusColor,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                      Navigator.pop(context);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: statusColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Copiar Link'),
-                      SizedBox(width: 8),
-                      Icon(Icons.content_copy, size: 20),
-                    ],
-                  ),
-                ),
-              ],
+            icon: Icon(status.icone, color: statusColor, size: 48),
+            title: Text(
+              status.titulo,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: statusColor),
             ),
+            content: _buildConteudoDialogo(context, url, status, statusColor),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
@@ -416,6 +317,110 @@ class _BoletosWidgetState extends State<BoletosWidget> {
             ],
           ),
     );
+  }
+
+  Widget _buildConteudoDialogo(
+    BuildContext context,
+    String url,
+    BoletoStatus status,
+    Color statusColor,
+  ) {
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          status.mensagem,
+          style: theme.textTheme.bodyMedium,
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const Divider(),
+        const SizedBox(height: AppSpacing.sm),
+        Text(
+          'Clique no botão abaixo para copiar o link do boleto:',
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: theme.colorScheme.outline),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.link,
+                color: theme.colorScheme.onSurfaceVariant,
+                size: 20,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  url,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        ElevatedButton(
+          onPressed: () => _copiarLink(context, url, statusColor),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: statusColor,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Copiar Link'),
+              SizedBox(width: AppSpacing.sm),
+              Icon(Icons.content_copy, size: 20),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _copiarLink(
+    BuildContext context,
+    String url,
+    Color statusColor,
+  ) async {
+    await Clipboard.setData(ClipboardData(text: url));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: AppSpacing.sm),
+              Text('Link copiado para a área de transferência!'),
+            ],
+          ),
+          backgroundColor: statusColor,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      Navigator.pop(context);
+    }
   }
 }
 

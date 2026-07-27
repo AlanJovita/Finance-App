@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
 import '../services/global_state.dart';
+import '../utils/app_colors_extension.dart';
+import '../utils/app_tokens.dart';
 import '../utils/responsive_utils.dart';
 import 'categoria_form_dialog.dart';
 
@@ -80,7 +82,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         }
       });
     } catch (e) {
-      print('Erro ao carregar categorias: $e');
+      debugPrint('Erro ao carregar categorias: $e');
     }
   }
 
@@ -147,11 +149,11 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         content: Row(
           children: [
             const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.red.shade700,
+        backgroundColor: context.appColors.error,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
       ),
@@ -324,23 +326,13 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
             ? 500.0
             : 600.0;
 
+    // Os campos não declaram estilo nem padding: o `inputDecorationTheme` do
+    // tema já define borda, preenchimento e tipografia para o app inteiro.
     return AlertDialog(
       title: Text(
         '${widget.fluxo == null ? 'Nova' : 'Editar'} ${widget.tipoFluxo == 'receita' ? 'Receita' : 'Despesa'}',
-        style: TextStyle(
-          fontSize: ResponsiveUtils.getFontSize(
-            context,
-            mobile: 18.0,
-            tablet: 20.0,
-            desktop: 22.0,
-          ),
-        ),
       ),
-      contentPadding: context.responsivePadding(
-        mobile: 16.0,
-        tablet: 20.0,
-        desktop: 24.0,
-      ),
+      contentPadding: context.responsivePadding(),
       content: SizedBox(
         width: dialogWidth,
         child: SingleChildScrollView(
@@ -351,32 +343,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
               children: [
                 TextFormField(
                   controller: _descricaoController,
-                  style: TextStyle(
-                    fontSize: ResponsiveUtils.getFontSize(context),
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Descrição',
-                    labelStyle: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(context),
-                    ),
-                    border: const OutlineInputBorder(),
-                    helperStyle: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(
-                        context,
-                        mobile: 12.0,
-                        tablet: 13.0,
-                        desktop: 14.0,
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: context.responsiveSpacing(),
-                      vertical: context.responsiveSpacing(
-                        mobile: 12.0,
-                        tablet: 14.0,
-                        desktop: 16.0,
-                      ),
-                    ),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Descrição'),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Campo obrigatório';
@@ -387,35 +354,13 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                     return null;
                   },
                 ),
-                SizedBox(height: context.responsiveSpacing()),
+                const SizedBox(height: AppSpacing.lg),
+
                 TextFormField(
                   controller: _valorController,
-                  style: TextStyle(
-                    fontSize: ResponsiveUtils.getFontSize(context),
-                  ),
-                  decoration: InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Valor',
-                    labelStyle: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(context),
-                    ),
                     prefixText: 'R\$ ',
-                    border: const OutlineInputBorder(),
-                    helperStyle: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(
-                        context,
-                        mobile: 12.0,
-                        tablet: 13.0,
-                        desktop: 14.0,
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: context.responsiveSpacing(),
-                      vertical: context.responsiveSpacing(
-                        mobile: 12.0,
-                        tablet: 14.0,
-                        desktop: 16.0,
-                      ),
-                    ),
                   ),
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -435,277 +380,23 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                     return null;
                   },
                 ),
-                SizedBox(height: context.responsiveSpacing()),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<int>(
-                        value:
-                            _categorias.isEmpty
-                                ? null
-                                : (_categorias.any(
-                                      (cat) => cat.id == _categoriaId,
-                                    ) ||
-                                    _categoriaId == 0)
-                                ? _categoriaId
-                                : 0,
-                        style: TextStyle(
-                          fontSize: ResponsiveUtils.getFontSize(context),
-                          color: Theme.of(context).textTheme.bodyLarge?.color,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Categoria',
-                          labelStyle: TextStyle(
-                            fontSize: ResponsiveUtils.getFontSize(context),
-                          ),
-                          border: const OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: context.responsiveSpacing(),
-                            vertical: context.responsiveSpacing(
-                              mobile: 12.0,
-                              tablet: 14.0,
-                              desktop: 16.0,
-                            ),
-                          ),
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 0,
-                            child: Text('Sem categoria'),
-                          ),
-                          ..._categorias.map((cat) {
-                            return DropdownMenuItem<int>(
-                              value: cat.id,
-                              child: Text(
-                                cat.descricao ?? 'Sem nome',
-                                style: TextStyle(
-                                  fontSize: ResponsiveUtils.getFontSize(
-                                    context,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _categoriaId = value ?? 0;
-                          });
-                        },
-                      ),
-                    ),
-                    SizedBox(width: context.responsiveSpacing(mobile: 8.0)),
-                    Container(
-                      margin: const EdgeInsets.only(top: 8.0),
-                      child: IconButton(
-                        onPressed: _abrirDialogNovaCategoria,
-                        icon: Icon(
-                          Icons.add_circle_outline,
-                          size: ResponsiveUtils.getIconSize(context),
-                        ),
-                        tooltip: 'Nova categoria',
-                        style: IconButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).primaryColor.withOpacity(0.1),
-                          padding: EdgeInsets.all(
-                            context.responsiveSpacing(
-                              mobile: 12.0,
-                              tablet: 14.0,
-                              desktop: 16.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: context.responsiveSpacing()),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Data de Vencimento',
-                    style: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(context),
-                    ),
-                  ),
-                  subtitle: Text(
-                    _dataVencimento != null
-                        ? '${_dataVencimento!.day.toString().padLeft(2, '0')}/${_dataVencimento!.month.toString().padLeft(2, '0')}/${_dataVencimento!.year}'
-                        : 'Selecione uma data',
-                    style: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(
-                        context,
-                        mobile: 13.0,
-                        tablet: 14.0,
-                        desktop: 15.0,
-                      ),
-                    ),
-                  ),
-                  trailing: IconButton(
-                    icon: Icon(
-                      Icons.calendar_today,
-                      size: ResponsiveUtils.getIconSize(
-                        context,
-                        mobile: 20.0,
-                        tablet: 22.0,
-                        desktop: 24.0,
-                      ),
-                    ),
-                    onPressed: _selecionarData,
-                  ),
-                ),
-                SizedBox(height: context.responsiveSpacing(mobile: 8.0)),
-                DropdownButtonFormField<String>(
-                  value: _repeticao,
-                  style: TextStyle(
-                    fontSize: ResponsiveUtils.getFontSize(context),
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                  decoration: InputDecoration(
-                    labelText: 'Repetição',
-                    labelStyle: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(context),
-                    ),
-                    border: const OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: context.responsiveSpacing(),
-                      vertical: context.responsiveSpacing(
-                        mobile: 12.0,
-                        tablet: 14.0,
-                        desktop: 16.0,
-                      ),
-                    ),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: '1', child: Text('Única vez')),
-                    DropdownMenuItem(value: '2', child: Text('Diária')),
-                    DropdownMenuItem(value: '3', child: Text('Semanal')),
-                    DropdownMenuItem(value: '4', child: Text('Mensal')),
-                    DropdownMenuItem(value: '5', child: Text('Anual')),
-                  ],
-                  onChanged:
-                      widget.fluxo != null
-                          ? null
-                          : (value) {
-                            if (value != null) {
-                              setState(() {
-                                _repeticao = value;
-                                if (value != '1') {
-                                  _numeroParcelas = 2;
-                                  _parcelasController.text = '2';
-                                } else {
-                                  _parcelasController.clear();
-                                }
-                              });
-                            }
-                          },
-                ),
-                SizedBox(height: context.responsiveSpacing()),
-                if (_repeticao != '1' && widget.fluxo == null) ...[
-                  TextFormField(
-                    controller: _parcelasController,
-                    style: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(context),
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Número de Parcelas',
-                      labelStyle: TextStyle(
-                        fontSize: ResponsiveUtils.getFontSize(context),
-                      ),
-                      border: const OutlineInputBorder(),
-                      helperText: 'Mínimo 2 parcelas',
-                      helperStyle: TextStyle(
-                        fontSize: ResponsiveUtils.getFontSize(
-                          context,
-                          mobile: 12.0,
-                          tablet: 13.0,
-                          desktop: 14.0,
-                        ),
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: context.responsiveSpacing(),
-                        vertical: context.responsiveSpacing(
-                          mobile: 12.0,
-                          tablet: 14.0,
-                          desktop: 16.0,
-                        ),
-                      ),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) {
-                      setState(() {
-                        _numeroParcelas = int.tryParse(value) ?? 1;
-                      });
-                    },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Campo obrigatório';
-                      }
-                      final num = int.tryParse(value);
-                      if (num == null || num < 2) {
-                        return 'Mínimo 2 parcelas';
-                      }
-                      return null;
-                    },
-                  ),
-                  SizedBox(height: context.responsiveSpacing()),
-                  RadioListTile<bool>(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      'Valor é da parcela',
-                      style: TextStyle(
-                        fontSize: ResponsiveUtils.getFontSize(context),
-                      ),
-                    ),
-                    value: true,
-                    groupValue: _valorEhParcela,
-                    onChanged: (value) {
-                      setState(() {
-                        _valorEhParcela = value ?? true;
-                      });
-                    },
-                  ),
-                  RadioListTile<bool>(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      'Valor total a dividir',
-                      style: TextStyle(
-                        fontSize: ResponsiveUtils.getFontSize(context),
-                      ),
-                    ),
-                    value: false,
-                    groupValue: _valorEhParcela,
-                    onChanged: (value) {
-                      setState(() {
-                        _valorEhParcela = value ?? true;
-                      });
-                    },
-                  ),
-                  if (!_valorEhParcela && _numeroParcelas > 0)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        bottom: context.responsiveSpacing(),
-                      ),
-                      child: Text(
-                        'Valor por parcela: R\$ ${(double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0) / _numeroParcelas}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: ResponsiveUtils.getFontSize(context),
-                          color: Theme.of(context).primaryColor,
-                        ),
-                      ),
-                    ),
-                ],
+                const SizedBox(height: AppSpacing.lg),
+
+                _buildCategoria(),
+                const SizedBox(height: AppSpacing.lg),
+
+                _buildDataVencimento(),
+                const SizedBox(height: AppSpacing.sm),
+
+                _buildRepeticao(),
+                const SizedBox(height: AppSpacing.lg),
+
+                if (_repeticao != '1' && widget.fluxo == null)
+                  ..._buildCamposParcelamento(),
+
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Confirmado',
-                    style: TextStyle(
-                      fontSize: ResponsiveUtils.getFontSize(context),
-                    ),
-                  ),
+                  title: const Text('Confirmado'),
                   value: _confirmado,
                   onChanged: (value) {
                     setState(() {
@@ -721,39 +412,171 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            'Cancelar',
-            style: TextStyle(fontSize: ResponsiveUtils.getFontSize(context)),
-          ),
+          child: const Text('Cancelar'),
         ),
         _isLoading
             ? CircularProgressIndicator(
               strokeWidth: ResponsiveUtils.isMobile(context) ? 3.0 : 4.0,
             )
-            : ElevatedButton(
-              onPressed: _save,
-              style: ElevatedButton.styleFrom(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.responsiveSpacing(
-                    mobile: 16.0,
-                    tablet: 20.0,
-                    desktop: 24.0,
-                  ),
-                  vertical: context.responsiveSpacing(
-                    mobile: 12.0,
-                    tablet: 14.0,
-                    desktop: 16.0,
-                  ),
-                ),
-              ),
-              child: Text(
-                'Salvar',
-                style: TextStyle(
-                  fontSize: ResponsiveUtils.getFontSize(context),
-                ),
-              ),
-            ),
+            : ElevatedButton(onPressed: _save, child: const Text('Salvar')),
       ],
     );
+  }
+
+  Widget _buildCategoria() {
+    final theme = Theme.of(context);
+
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<int>(
+            value:
+                _categorias.isEmpty
+                    ? null
+                    : (_categorias.any((cat) => cat.id == _categoriaId) ||
+                        _categoriaId == 0)
+                    ? _categoriaId
+                    : 0,
+            decoration: const InputDecoration(labelText: 'Categoria'),
+            items: [
+              const DropdownMenuItem(value: 0, child: Text('Sem categoria')),
+              ..._categorias.map((cat) {
+                return DropdownMenuItem<int>(
+                  value: cat.id,
+                  child: Text(cat.descricao ?? 'Sem nome'),
+                );
+              }),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _categoriaId = value ?? 0;
+              });
+            },
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        IconButton(
+          onPressed: _abrirDialogNovaCategoria,
+          icon: const Icon(Icons.add_circle_outline),
+          tooltip: 'Nova categoria',
+          style: IconButton.styleFrom(
+            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+            padding: const EdgeInsets.all(AppSpacing.md),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDataVencimento() {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Data de Vencimento'),
+      subtitle: Text(
+        _dataVencimento != null
+            ? '${_dataVencimento!.day.toString().padLeft(2, '0')}/${_dataVencimento!.month.toString().padLeft(2, '0')}/${_dataVencimento!.year}'
+            : 'Selecione uma data',
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.calendar_today, size: 20),
+        onPressed: _selecionarData,
+      ),
+    );
+  }
+
+  Widget _buildRepeticao() {
+    return DropdownButtonFormField<String>(
+      value: _repeticao,
+      decoration: const InputDecoration(labelText: 'Repetição'),
+      items: const [
+        DropdownMenuItem(value: '1', child: Text('Única vez')),
+        DropdownMenuItem(value: '2', child: Text('Diária')),
+        DropdownMenuItem(value: '3', child: Text('Semanal')),
+        DropdownMenuItem(value: '4', child: Text('Mensal')),
+        DropdownMenuItem(value: '5', child: Text('Anual')),
+      ],
+      onChanged:
+          widget.fluxo != null
+              ? null
+              : (value) {
+                if (value != null) {
+                  setState(() {
+                    _repeticao = value;
+                    if (value != '1') {
+                      _numeroParcelas = 2;
+                      _parcelasController.text = '2';
+                    } else {
+                      _parcelasController.clear();
+                    }
+                  });
+                }
+              },
+    );
+  }
+
+  List<Widget> _buildCamposParcelamento() {
+    final theme = Theme.of(context);
+    final valorPorParcela =
+        (double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0) /
+        _numeroParcelas;
+
+    return [
+      TextFormField(
+        controller: _parcelasController,
+        decoration: const InputDecoration(
+          labelText: 'Número de Parcelas',
+          helperText: 'Mínimo 2 parcelas',
+        ),
+        keyboardType: TextInputType.number,
+        onChanged: (value) {
+          setState(() {
+            _numeroParcelas = int.tryParse(value) ?? 1;
+          });
+        },
+        validator: (value) {
+          if (value == null || value.isEmpty) {
+            return 'Campo obrigatório';
+          }
+          final num = int.tryParse(value);
+          if (num == null || num < 2) {
+            return 'Mínimo 2 parcelas';
+          }
+          return null;
+        },
+      ),
+      const SizedBox(height: AppSpacing.lg),
+      RadioListTile<bool>(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Valor é da parcela'),
+        value: true,
+        groupValue: _valorEhParcela,
+        onChanged: (value) {
+          setState(() {
+            _valorEhParcela = value ?? true;
+          });
+        },
+      ),
+      RadioListTile<bool>(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Valor total a dividir'),
+        value: false,
+        groupValue: _valorEhParcela,
+        onChanged: (value) {
+          setState(() {
+            _valorEhParcela = value ?? true;
+          });
+        },
+      ),
+      if (!_valorEhParcela && _numeroParcelas > 0)
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+          child: Text(
+            'Valor por parcela: R\$ $valorPorParcela',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ),
+    ];
   }
 }

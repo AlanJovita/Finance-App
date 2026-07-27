@@ -7,8 +7,7 @@ import 'providers/theme_provider.dart';
 import 'pages/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/lista_caixas_page.dart';
-import 'pages/receitas_page.dart';
-import 'pages/despesas_page.dart';
+import 'pages/fluxos_page.dart';
 import 'utils/app_theme.dart';
 
 void main() {
@@ -87,8 +86,8 @@ class MyApp extends StatelessWidget {
               '/login': (context) => const LoginPage(),
               '/dashboard': (context) => const DashboardPage(),
               '/caixas': (context) => const ListaCaixasPage(),
-              '/receitas': (context) => const ReceitasPage(),
-              '/despesas': (context) => const DespesasPage(),
+              '/receitas': (context) => const FluxosPage(tipo: TipoFluxo.receita),
+              '/despesas': (context) => const FluxosPage(tipo: TipoFluxo.despesa),
             },
           );
         },

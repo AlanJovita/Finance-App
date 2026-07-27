@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 
-/// Utilitários para facilitar o uso de valores responsivos
+import 'app_tokens.dart';
+
+/// Utilitários para facilitar o uso de valores responsivos.
+///
+/// Os defaults saem das escalas de `app_tokens.dart` para não existirem duas
+/// fontes de verdade: [AppSpacing] e [AppRadius] são o vocabulário de medidas;
+/// esta classe só escolhe qual degrau usar em cada breakpoint.
 class ResponsiveUtils {
   /// Retorna o espaçamento responsivo baseado no tipo de dispositivo
   static double getSpacing(
     BuildContext context, {
-    double mobile = 8.0,
-    double tablet = 12.0,
-    double desktop = 16.0,
+    double mobile = AppSpacing.sm,
+    double tablet = AppSpacing.md,
+    double desktop = AppSpacing.lg,
   }) {
     if (ResponsiveBreakpoints.of(context).isDesktop) {
       return desktop;
@@ -21,9 +27,9 @@ class ResponsiveUtils {
   /// Retorna padding responsivo
   static EdgeInsets getPadding(
     BuildContext context, {
-    double mobile = 16.0,
-    double tablet = 24.0,
-    double desktop = 32.0,
+    double mobile = AppSpacing.lg,
+    double tablet = AppSpacing.xl,
+    double desktop = AppSpacing.xxl,
   }) {
     if (ResponsiveBreakpoints.of(context).isDesktop) {
       return EdgeInsets.all(desktop);
@@ -150,9 +156,9 @@ class ResponsiveUtils {
   /// Retorna radius de borda responsivo
   static double getBorderRadius(
     BuildContext context, {
-    double mobile = 8.0,
-    double tablet = 12.0,
-    double desktop = 16.0,
+    double mobile = AppRadius.sm,
+    double tablet = AppRadius.md,
+    double desktop = AppRadius.lg,
   }) {
     if (ResponsiveBreakpoints.of(context).isDesktop) {
       return desktop;
@@ -165,9 +171,9 @@ class ResponsiveUtils {
   /// Retorna elevation responsivo para cards
   static double getCardElevation(
     BuildContext context, {
-    double mobile = 2.0,
-    double tablet = 4.0,
-    double desktop = 6.0,
+    double mobile = AppElevation.card,
+    double tablet = AppElevation.cardRaised,
+    double desktop = AppElevation.floatingRaised,
   }) {
     if (ResponsiveBreakpoints.of(context).isDesktop) {
       return desktop;
@@ -185,9 +191,9 @@ extension ResponsiveContextExtension on BuildContext {
   bool get isDesktop => ResponsiveUtils.isDesktop(this);
 
   double responsiveSpacing({
-    double mobile = 8.0,
-    double tablet = 12.0,
-    double desktop = 16.0,
+    double mobile = AppSpacing.sm,
+    double tablet = AppSpacing.md,
+    double desktop = AppSpacing.lg,
   }) => ResponsiveUtils.getSpacing(
     this,
     mobile: mobile,
@@ -196,9 +202,9 @@ extension ResponsiveContextExtension on BuildContext {
   );
 
   EdgeInsets responsivePadding({
-    double mobile = 16.0,
-    double tablet = 24.0,
-    double desktop = 32.0,
+    double mobile = AppSpacing.lg,
+    double tablet = AppSpacing.xl,
+    double desktop = AppSpacing.xxl,
   }) => ResponsiveUtils.getPadding(
     this,
     mobile: mobile,
