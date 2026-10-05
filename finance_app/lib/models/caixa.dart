@@ -96,7 +96,12 @@ class Caixa {
     try {
       return Caixa(
         id: _safeCast<int>(json['id']),
-        idLoja: _safeCast<int>(json['id_loja']) ?? 0, // Campo obrigatório
+        // A API devolve 'id_cliente'; 'id_loja' é aceito como legado, igual ao
+        // que Categoria e os relatórios já faziam. Lendo só 'id_loja' isto caía
+        // em 0 sem erro nenhum.
+        idLoja:
+            _safeCast<int>(json['id_cliente'] ?? json['id_loja']) ??
+            0, // Campo obrigatório
         nomeLoja: json['nome_loja'] as String?,
         idCaixa: _safeCast<int>(json['id_caixa']),
         idUsuario: _safeCast<int>(json['id_usuario']) ?? 0, // Campo obrigatório
@@ -136,7 +141,7 @@ class Caixa {
 
   Map<String, dynamic> toJson() => _$CaixaToJson(this);
 
-  /// Payload para POST /finance/caixa: o Caixa.from_dict da api-master só lê
+  /// Payload para POST /finance/caixa: o Caixa.from_dict da finance-api só lê
   /// chaves maiúsculas legadas (DATA_ABERTURA, STATUS_CAIXA...) ou os nomes
   /// curtos do PDV — as chaves de [toJson] (data_abertura...) não são aceitas.
   Map<String, dynamic> toApiJson() => {

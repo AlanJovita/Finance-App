@@ -11,7 +11,9 @@ import 'global_state.dart';
 import 'logger_service.dart';
 
 class ApiService {
-  final String _baseUrl = apiBaseUrl;
+  /// finance-api, não a api-master: o [LoggerService] é que continua apontando
+  /// para lá, porque `/v1/erro` e `/v1/evento` não foram portados.
+  final String _baseUrl = financeApiBaseUrl;
   final _logger = LoggerService();
 
   Future<Map<String, dynamic>> _handleRequest(
@@ -527,7 +529,10 @@ class ApiService {
   Future<List<Boleto>> checkBoletos(int idCliente) async {
     try {
       final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/boletos/check/$idCliente')),
+        // O `/finance` faltava aqui e em nenhuma outra chamada do arquivo. Contra
+        // a api-master isso era 404; a finance-api serve os dois prefixos, mas
+        // deixar fora do padrão esconde o próximo erro igual.
+        () => http.get(Uri.parse('$_baseUrl/finance/boletos/check/$idCliente')),
         'checkBoletos',
       );
 
