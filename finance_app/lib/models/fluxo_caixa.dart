@@ -131,5 +131,45 @@ class FluxoCaixa {
     return null;
   }
 
+  /// Cópia com campos trocados, para quem precisa alterar uma coisa só e
+  /// mandar o registro inteiro de volta — o `UPDATE` da API reescreve todas as
+  /// colunas, então omitir um campo o apagaria.
+  ///
+  /// Todo campo é anulável e `null` aqui significa "mantém o atual": não dá
+  /// para limpar um campo por este caminho, e nenhum chamador precisa disso.
+  FluxoCaixa copyWith({
+    int? id,
+    int? idLoja,
+    int? idCategoria,
+    int? idSubcategoria,
+    String? descricao,
+    double? valor,
+    String? tipoFluxo,
+    bool? cancelado,
+    bool? confirmado,
+    DateTime? dataCriacao,
+    DateTime? dataVencimento,
+    int? diaVencimento,
+    String? repeticao,
+    int? idRef,
+  }) {
+    return FluxoCaixa(
+      id: id ?? this.id,
+      idLoja: idLoja ?? this.idLoja,
+      idCategoria: idCategoria ?? this.idCategoria,
+      idSubcategoria: idSubcategoria ?? this.idSubcategoria,
+      descricao: descricao ?? this.descricao,
+      valor: valor ?? this.valor,
+      tipoFluxo: tipoFluxo ?? this.tipoFluxo,
+      cancelado: cancelado ?? this.cancelado,
+      confirmado: confirmado ?? this.confirmado,
+      dataCriacao: dataCriacao ?? this.dataCriacao,
+      dataVencimento: dataVencimento ?? this.dataVencimento,
+      diaVencimento: diaVencimento ?? this.diaVencimento,
+      repeticao: repeticao ?? this.repeticao,
+      idRef: idRef ?? this.idRef,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$FluxoCaixaToJson(this);
 }

@@ -1,40 +1,11 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:finance_app/models/relatorio_mensal.dart';
 import 'package:finance_app/utils/app_theme.dart';
 import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
 
-/// Carrega a Roboto real do SDK.
-///
-/// Sem isto o teste desenha com a Ahem, em que todo caractere é um quadrado de
-/// 1em — muito mais larga que a fonte de verdade. A imagem fica ilegível e,
-/// pior, acusa colisão de rótulo onde não há. Para decidir espaçamento é
-/// preciso a métrica real.
-Future<void> _carregarRoboto() async {
-  // FLUTTER_ROOT é exportado pelo `flutter test`; o caminho fixo é só a rede de
-  // segurança para quem roda o test runner direto.
-  final raiz =
-      Platform.environment['FLUTTER_ROOT'] ?? r'C:\src\flutter';
-  final arquivo = File(
-    '$raiz${Platform.pathSeparator}bin${Platform.pathSeparator}cache'
-    '${Platform.pathSeparator}artifacts${Platform.pathSeparator}material_fonts'
-    '${Platform.pathSeparator}roboto-regular.ttf',
-  );
-
-  if (!arquivo.existsSync()) {
-    // Sem a fonte real o teste desenha em Ahem e as imagens não batem com as
-    // gravadas. Falhar aqui, com a causa, é melhor que um diff ilegível.
-    fail('Roboto não encontrada em ${arquivo.path} — defina FLUTTER_ROOT');
-  }
-
-  final loader = FontLoader('Roboto')
-    ..addFont(arquivo.readAsBytes().then((b) => ByteData.view(b.buffer)));
-  await loader.load();
-}
+import 'fontes_de_teste.dart';
 
 /// Renderiza os gráficos para inspeção visual — o validador de paleta confere
 /// cor, não geometria. Colisão de rótulo, estouro de largura e eixo cortado só
@@ -74,7 +45,7 @@ Widget _tela(ThemeData tema, List<RelatorioMensal> dados) {
 }
 
 void main() {
-  setUpAll(_carregarRoboto);
+  setUpAll(carregarRoboto);
 
   testWidgets('graficos mensais — claro', (tester) async {
     tester.view.physicalSize = const Size(900, 1500);

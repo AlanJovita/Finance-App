@@ -378,14 +378,14 @@ abstract final class CategoriaVisuais {
   /// Nomes do catálogo que casam com [termo]. Termo vazio devolve tudo, com os
   /// [iconesSugeridos] à frente.
   static List<String> buscarIcones(String termo) {
-    final alvo = _semAcento(termo.trim().toLowerCase());
+    final alvo = semAcento(termo.trim().toLowerCase());
 
     final nomes =
         alvo.isEmpty
             ? catalogo.keys.toList()
             : catalogo.keys.where((nome) {
               final e = catalogo[nome]!;
-              return _semAcento('${e.rotulo} ${e.busca} $nome').contains(alvo);
+              return semAcento('${e.rotulo} ${e.busca} $nome').contains(alvo);
             }).toList();
 
     nomes.sort((a, b) {
@@ -404,15 +404,17 @@ abstract final class CategoriaVisuais {
   }
 
   /// A busca é digitada sem acento ("alimentacao"), mas os rótulos têm acento.
-  static String _semAcento(String texto) {
+  /// Também serve à busca por descrição na lista de lançamentos, pelo mesmo
+  /// motivo: ninguém digita "água" com trema de pressa.
+  static String semAcento(String texto) {
     const comAcento = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
-    const semAcento = 'aaaaaeeeeiiiiooooouuuucn';
+    const equivalente = 'aaaaaeeeeiiiiooooouuuucn';
 
     final buffer = StringBuffer();
     for (final rune in texto.runes) {
       final char = String.fromCharCode(rune);
       final i = comAcento.indexOf(char);
-      buffer.write(i == -1 ? char : semAcento[i]);
+      buffer.write(i == -1 ? char : equivalente[i]);
     }
     return buffer.toString();
   }
