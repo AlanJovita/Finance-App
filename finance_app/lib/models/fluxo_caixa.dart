@@ -38,6 +38,10 @@ class FluxoCaixa {
   final int? idLoja;
   @JsonKey(name: 'id_categoria')
   final int? idCategoria;
+
+  /// Opcional: 0 quando o lançamento não usa subcategoria.
+  @JsonKey(name: 'id_subcategoria')
+  final int? idSubcategoria;
   final String? descricao;
   final double? valor;
   @JsonKey(name: 'tipo_fluxo')
@@ -58,6 +62,7 @@ class FluxoCaixa {
     this.id,
     this.idLoja,
     this.idCategoria,
+    this.idSubcategoria,
     this.descricao,
     this.valor,
     this.tipoFluxo,
@@ -76,6 +81,7 @@ class FluxoCaixa {
         id: _safeCast<int>(json['id']),
         idLoja: _safeCast<int>(json['id_cliente'] ?? json['id_loja']),
         idCategoria: _safeCast<int>(json['id_categoria']),
+        idSubcategoria: _safeCast<int>(json['id_subcategoria']),
         descricao: _safeString(json['descricao']),
         valor: _safeCast<double>(json['valor']),
         tipoFluxo: _safeString(json['tipo_fluxo']),

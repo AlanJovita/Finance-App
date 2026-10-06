@@ -1,35 +1,23 @@
-import 'dart:convert';
-
+/// Token de acesso por URL.
+///
+/// O token é **opaco**: o app não o decodifica nem extrai nada dele, só repassa
+/// à API, que valida contra o hash guardado no banco.
+///
+/// Antes era `base64(cnpj)` e o app decodificava para descobrir o CNPJ. Como
+/// CNPJ é informação pública, o link de qualquer loja era derivável — o esquema
+/// não autenticava nada. Se precisar de algum dado do usuário aqui, peça à API
+/// depois de validar o token; não volte a embutir dado no token.
 class TokenService {
-  /// Codifica um CNPJ em Base64
-  static String encodeToken(String cnpj) {
-    // Remove caracteres especiais do CNPJ
-    final cnpjLimpo = cnpj.replaceAll(RegExp(r'[^\d]'), '');
-    final bytes = utf8.encode(cnpjLimpo);
-    return base64Url.encode(bytes).replaceAll('=', ''); // Remove padding
-  }
+  /// Tamanho mínimo plausível para `secrets.token_urlsafe(32)` (~43 chars).
+  ///
+  /// Serve só para não gastar uma requisição com um caminho que claramente não
+  /// é token — quem decide de verdade é a API.
+  static const int _tamanhoMinimo = 20;
 
-  /// Decodifica um token Base64 para CNPJ
-  static String? decodeToken(String token) {
-    try {
-      // Adiciona padding se necessário
-      String paddedToken = token;
-      while (paddedToken.length % 4 != 0) {
-        paddedToken += '=';
-      }
+  /// Alfabeto do `token_urlsafe`: base64url sem padding.
+  static final RegExp _formato = RegExp(r'^[A-Za-z0-9_-]+$');
 
-      final bytes = base64Url.decode(paddedToken);
-      final cnpj = utf8.decode(bytes);
-
-      return cnpj;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Valida se um CNPJ é válido (formato básico)
-  static bool isValidCNPJ(String cnpj) {
-    final cnpjLimpo = cnpj.replaceAll(RegExp(r'[^\d]'), '');
-    return cnpjLimpo.isNotEmpty;
-  }
+  /// O caminho da URL parece um token de acesso?
+  static bool pareceToken(String token) =>
+      token.length >= _tamanhoMinimo && _formato.hasMatch(token);
 }

@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import '../models/categoria.dart';
 import '../models/fluxo_caixa.dart';
+import '../models/subcategoria.dart';
 import '../services/api_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
+import '../utils/categoria_visuais.dart';
+import '../utils/currency_formatter.dart';
+import '../utils/currency_input_formatter.dart';
 import '../utils/responsive_utils.dart';
 import 'categoria_form_dialog.dart';
+import 'seletor_categoria.dart';
+import 'subcategoria_form_dialog.dart';
 
 class FluxoFormDialog extends StatefulWidget {
   final String tipoFluxo;
@@ -34,7 +41,14 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   bool _confirmado = false;
   String _repeticao = '1'; // 1 = única vez
   int? _categoriaId = 0;
-  List<dynamic> _categorias = [];
+  int? _subcategoriaId = 0;
+  List<Categoria> _categorias = [];
+  List<Subcategoria> _subcategorias = [];
+
+  /// Só aparece quando a categoria escolhida ainda não tem nenhuma filha — é o
+  /// atalho para criar a primeira. Com subcategorias já cadastradas, o card
+  /// aparece direto e o checkbox some.
+  bool _habilitarSubcategorias = false;
   int _numeroParcelas = 1;
   bool _valorEhParcela = true; // true = valor da parcela, false = valor total
 
@@ -45,8 +59,14 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
     if (widget.fluxo != null) {
       _descricaoController.text = widget.fluxo!.descricao ?? '';
-      _valorController.text = widget.fluxo!.valor?.toString() ?? '';
+      // Pré-formatado: o campo é mascarado, então "150.5" cru entraria como
+      // R$ 1,50 na primeira tecla.
+      _valorController.text =
+          widget.fluxo!.valor == null
+              ? ''
+              : CurrencyFormatter.formatValue(widget.fluxo!.valor);
       _categoriaId = widget.fluxo!.idCategoria ?? 0;
+      _subcategoriaId = widget.fluxo!.idSubcategoria ?? 0;
       _dataVencimento = widget.fluxo!.dataVencimento ?? DateTime.now();
       _confirmado = widget.fluxo!.confirmado ?? false;
       _repeticao = widget.fluxo!.repeticao ?? '1';
@@ -54,6 +74,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
     // Carregar categorias após definir os valores iniciais
     _loadCategorias();
+    _loadSubcategorias();
   }
 
   @override
@@ -64,11 +85,23 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     super.dispose();
   }
 
+  /// 1 = receita, 2 = despesa — o mesmo código de `tipo_fluxo` do banco.
+  int get _tipoFluxoCategoria => widget.tipoFluxo == 'receita' ? 1 : 2;
+
   Future<void> _loadCategorias() async {
     try {
       final categorias = await _apiService.listCategorias();
+
+      // A API devolve as categorias das duas naturezas; um lançamento de despesa
+      // não pode oferecer categoria de receita.
+      final doTipo =
+          categorias
+              .where((cat) => cat.tipoFluxo == _tipoFluxoCategoria)
+              .toList();
+
+      if (!mounted) return;
       setState(() {
-        _categorias = categorias;
+        _categorias = doTipo;
 
         // Validar se a categoria selecionada existe na lista
         if (_categoriaId != null && _categoriaId != 0) {
@@ -78,12 +111,61 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           if (!categoriaExiste) {
             // Se a categoria não existe, definir como "Sem categoria"
             _categoriaId = 0;
+            _subcategoriaId = 0;
           }
         }
       });
     } catch (e) {
       debugPrint('Erro ao carregar categorias: $e');
     }
+  }
+
+  Future<void> _loadSubcategorias() async {
+    try {
+      final subcategorias = await _apiService.listSubcategorias();
+      if (!mounted) return;
+      setState(() {
+        _subcategorias = subcategorias;
+
+        if (_subcategoriaId != null && _subcategoriaId != 0) {
+          final existe = _subcategorias.any((s) => s.id == _subcategoriaId);
+          if (!existe) _subcategoriaId = 0;
+        }
+
+        // Editando um lançamento que já tem subcategoria, o card precisa nascer
+        // aberto mesmo que a categoria tenha só essa uma filha.
+        if (_subcategoriaId != null && _subcategoriaId != 0) {
+          _habilitarSubcategorias = true;
+        }
+      });
+    } catch (e) {
+      debugPrint('Erro ao carregar subcategorias: $e');
+    }
+  }
+
+  /// Filhas da categoria em foco. Sem categoria escolhida não há pai ao qual
+  /// vincular, então a lista é vazia e o bloco inteiro some.
+  List<Subcategoria> get _subcategoriasDaCategoria {
+    if (_categoriaId == null || _categoriaId == 0) return const [];
+    return _subcategorias
+        .where((s) => s.idCategoria == _categoriaId)
+        .toList();
+  }
+
+  /// 0 quando não há subcategoria escolhida — ou quando a escolhida não é filha
+  /// da categoria atual, o que impede gravar um vínculo órfão.
+  int get _idSubcategoriaParaSalvar {
+    final id = _subcategoriaId ?? 0;
+    if (id == 0) return 0;
+    return _subcategoriasDaCategoria.any((s) => s.id == id) ? id : 0;
+  }
+
+  Categoria? get _categoriaSelecionada {
+    if (_categoriaId == null || _categoriaId == 0) return null;
+    for (final cat in _categorias) {
+      if (cat.id == _categoriaId) return cat;
+    }
+    return null;
   }
 
   int _gerarIdRef() {
@@ -169,8 +251,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       }
 
       // Validação do valor
-      final valorText = _valorController.text.replaceAll(',', '.');
-      final valorBase = double.tryParse(valorText);
+      final valorBase = CurrencyFormatter.parse(_valorController.text);
 
       if (valorBase == null) {
         _showError('Valor inválido. Use apenas números');
@@ -193,6 +274,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
             id: widget.fluxo!.id,
             idLoja: GlobalState().firstIdLoja,
             idCategoria: _categoriaId ?? 0,
+            idSubcategoria: _idSubcategoriaParaSalvar,
             descricao: _descricaoController.text,
             valor: valorBase,
             tipoFluxo: tipoFluxoValue,
@@ -213,6 +295,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
               id: 0,
               idLoja: GlobalState().firstIdLoja,
               idCategoria: _categoriaId ?? 0,
+            idSubcategoria: _idSubcategoriaParaSalvar,
               descricao: _descricaoController.text,
               valor: valorBase,
               tipoFluxo: tipoFluxoValue,
@@ -246,6 +329,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 id: 0,
                 idLoja: GlobalState().firstIdLoja,
                 idCategoria: _categoriaId ?? 0,
+            idSubcategoria: _idSubcategoriaParaSalvar,
                 descricao: descricaoComParcela,
                 valor: valorParcela,
                 tipoFluxo: tipoFluxoValue,
@@ -302,18 +386,40 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     final int? novaCategoriaId = await showDialog<int>(
       context: context,
       builder:
-          (context) => CategoriaFormDialog(
-            tipoFluxo: widget.tipoFluxo == 'receita' ? 1 : 2,
-          ),
+          (context) => CategoriaFormDialog(tipoFluxo: _tipoFluxoCategoria),
     );
 
     if (novaCategoriaId != null) {
       // Recarregar categorias
       await _loadCategorias();
       // Selecionar a categoria recém-criada
+      if (!mounted) return;
       setState(() {
         _categoriaId = novaCategoriaId;
+        _subcategoriaId = 0;
+        _habilitarSubcategorias = false;
       });
+    }
+  }
+
+  Future<void> _abrirDialogNovaSubcategoria(
+    Categoria categoria,
+    Color corCategoria,
+  ) async {
+    final int? novaId = await showDialog<int>(
+      context: context,
+      builder:
+          (context) => SubcategoriaFormDialog(
+            idCategoria: categoria.id!,
+            nomeCategoria: categoria.descricao,
+            corCategoria: corCategoria,
+          ),
+    );
+
+    if (novaId != null) {
+      await _loadSubcategorias();
+      if (!mounted) return;
+      setState(() => _subcategoriaId = novaId);
     }
   }
 
@@ -343,7 +449,10 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
               children: [
                 TextFormField(
                   controller: _descricaoController,
-                  decoration: const InputDecoration(labelText: 'Descrição'),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    labelText: 'Descrição',
+                  ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Campo obrigatório';
@@ -354,23 +463,27 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                     return null;
                   },
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
 
                 TextFormField(
                   controller: _valorController,
                   decoration: const InputDecoration(
+                    isDense: true,
                     labelText: 'Valor',
                     prefixText: 'R\$ ',
                   ),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
+                  // Só dígitos: a vírgula e o ponto são postos pela máscara.
+                  keyboardType: TextInputType.number,
+                  inputFormatters: const [CurrencyInputFormatter()],
+                  onChanged: (_) {
+                    // Realimenta a prévia do valor por parcela.
+                    if (_repeticao != '1') setState(() {});
+                  },
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Campo obrigatório';
                     }
-                    final valorLimpo = value.replaceAll(',', '.');
-                    final numero = double.tryParse(valorLimpo);
+                    final numero = CurrencyFormatter.parse(value);
                     if (numero == null) {
                       return 'Valor inválido';
                     }
@@ -380,22 +493,25 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                     return null;
                   },
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
 
                 _buildCategoria(),
-                const SizedBox(height: AppSpacing.lg),
+                ..._buildSubcategoria(),
+                const SizedBox(height: AppSpacing.md),
 
                 _buildDataVencimento(),
-                const SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: AppSpacing.xs),
 
                 _buildRepeticao(),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
 
                 if (_repeticao != '1' && widget.fluxo == null)
                   ..._buildCamposParcelamento(),
 
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
                   title: const Text('Confirmado'),
                   value: _confirmado,
                   onChanged: (value) {
@@ -424,53 +540,98 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   }
 
   Widget _buildCategoria() {
-    final theme = Theme.of(context);
+    return SeletorCategoria(
+      titulo: 'Categorias',
+      rotuloBotaoNovo: 'nova categoria',
+      mensagemVazio: 'Nenhuma categoria cadastrada',
+      itens: [
+        for (final cat in _categorias)
+          if (cat.id != null)
+            ItemSelecionavel(
+              id: cat.id!,
+              descricao: cat.descricao,
+              icone: cat.icone,
+              cor: CategoriaVisuais.cor(cat.cor),
+              destaque: cat.destaque == true,
+            ),
+      ],
+      selecionadoId: _categoriaId == 0 ? null : _categoriaId,
+      onSelecionar: (id) {
+        setState(() {
+          _categoriaId = id ?? 0;
+          // Trocar de categoria invalida a filha escolhida: ela pertencia à
+          // categoria anterior.
+          _subcategoriaId = 0;
+          _habilitarSubcategorias = false;
+        });
+      },
+      onNovo: _abrirDialogNovaCategoria,
+      rotuloNenhum: 'Sem categoria',
+    );
+  }
 
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<int>(
-            value:
-                _categorias.isEmpty
-                    ? null
-                    : (_categorias.any((cat) => cat.id == _categoriaId) ||
-                        _categoriaId == 0)
-                    ? _categoriaId
-                    : 0,
-            decoration: const InputDecoration(labelText: 'Categoria'),
-            items: [
-              const DropdownMenuItem(value: 0, child: Text('Sem categoria')),
-              ..._categorias.map((cat) {
-                return DropdownMenuItem<int>(
-                  value: cat.id,
-                  child: Text(cat.descricao ?? 'Sem nome'),
-                );
+  /// Bloco de subcategoria: o checkbox de habilitar, o card, ou nada.
+  List<Widget> _buildSubcategoria() {
+    final categoria = _categoriaSelecionada;
+    if (categoria == null) return const [];
+
+    final filhas = _subcategoriasDaCategoria;
+    final corPai = CategoriaVisuais.cor(categoria.cor);
+    final corFilha = corPai.withValues(
+      alpha: CategoriaVisuais.opacidadeSubcategoria,
+    );
+
+    // Já existindo subcategoria, o card vai direto — o checkbox só serve para
+    // criar a primeira.
+    final mostraCard = filhas.isNotEmpty || _habilitarSubcategorias;
+
+    return [
+      const SizedBox(height: AppSpacing.sm),
+      if (filhas.isEmpty)
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: const Text('habilitar subcategorias'),
+          value: _habilitarSubcategorias,
+          onChanged:
+              (v) => setState(() {
+                _habilitarSubcategorias = v ?? false;
+                if (!_habilitarSubcategorias) _subcategoriaId = 0;
               }),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _categoriaId = value ?? 0;
-              });
-            },
-          ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        IconButton(
-          onPressed: _abrirDialogNovaCategoria,
-          icon: const Icon(Icons.add_circle_outline),
-          tooltip: 'Nova categoria',
-          style: IconButton.styleFrom(
-            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-            padding: const EdgeInsets.all(AppSpacing.md),
-          ),
+      if (mostraCard) ...[
+        if (filhas.isEmpty) const SizedBox(height: AppSpacing.xs),
+        SeletorCategoria(
+          titulo: 'Subcategoria',
+          rotuloBotaoNovo: 'subcategoria',
+          mensagemVazio: 'Nenhuma subcategoria cadastrada',
+          itens: [
+            for (final sub in filhas)
+              if (sub.id != null)
+                ItemSelecionavel(
+                  id: sub.id!,
+                  descricao: sub.descricao,
+                  icone: sub.icone,
+                  cor: corFilha,
+                  destaque: sub.destaque == true,
+                ),
+          ],
+          selecionadoId: _subcategoriaId == 0 ? null : _subcategoriaId,
+          onSelecionar: (id) => setState(() => _subcategoriaId = id ?? 0),
+          onNovo: () => _abrirDialogNovaSubcategoria(categoria, corPai),
+          rotuloNenhum: 'Sem subcategoria',
         ),
       ],
-    );
+    ];
   }
 
   Widget _buildDataVencimento() {
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      dense: true,
+      visualDensity: VisualDensity.compact,
       title: const Text('Data de Vencimento'),
       subtitle: Text(
         _dataVencimento != null
@@ -487,7 +648,11 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   Widget _buildRepeticao() {
     return DropdownButtonFormField<String>(
       value: _repeticao,
-      decoration: const InputDecoration(labelText: 'Repetição'),
+      isDense: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        labelText: 'Repetição',
+      ),
       items: const [
         DropdownMenuItem(value: '1', child: Text('Única vez')),
         DropdownMenuItem(value: '2', child: Text('Diária')),
@@ -517,13 +682,14 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   List<Widget> _buildCamposParcelamento() {
     final theme = Theme.of(context);
     final valorPorParcela =
-        (double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0) /
-        _numeroParcelas;
+        (CurrencyFormatter.parse(_valorController.text) ?? 0) /
+        (_numeroParcelas > 0 ? _numeroParcelas : 1);
 
     return [
       TextFormField(
         controller: _parcelasController,
         decoration: const InputDecoration(
+          isDense: true,
           labelText: 'Número de Parcelas',
           helperText: 'Mínimo 2 parcelas',
         ),
@@ -544,9 +710,11 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           return null;
         },
       ),
-      const SizedBox(height: AppSpacing.lg),
+      const SizedBox(height: AppSpacing.md),
       RadioListTile<bool>(
         contentPadding: EdgeInsets.zero,
+        dense: true,
+        visualDensity: VisualDensity.compact,
         title: const Text('Valor é da parcela'),
         value: true,
         groupValue: _valorEhParcela,
@@ -558,6 +726,8 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       ),
       RadioListTile<bool>(
         contentPadding: EdgeInsets.zero,
+        dense: true,
+        visualDensity: VisualDensity.compact,
         title: const Text('Valor total a dividir'),
         value: false,
         groupValue: _valorEhParcela,
@@ -571,7 +741,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.lg),
           child: Text(
-            'Valor por parcela: R\$ $valorPorParcela',
+            'Valor por parcela: ${CurrencyFormatter.format(valorPorParcela)}',
             style: theme.textTheme.titleSmall?.copyWith(
               color: theme.colorScheme.primary,
             ),

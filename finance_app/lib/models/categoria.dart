@@ -53,12 +53,26 @@ class Categoria {
   @JsonKey(name: 'tipo_fluxo')
   final int tipoFluxo;
 
+  /// Marca a categoria para aparecer entre os 4 círculos do seletor.
+  @AtivadoConverter()
+  final bool? destaque;
+
+  /// Nome do ícone Material (ex.: `shopping_cart`), resolvido por
+  /// `CategoriaVisuais.icone`. Nulo/vazio cai no ícone genérico.
+  final String? icone;
+
+  /// Cor em `#RRGGBB`, resolvida por `CategoriaVisuais.cor`.
+  final String? cor;
+
   Categoria({
     this.id,
     required this.idLoja,
     required this.descricao,
     this.ativado,
     required this.tipoFluxo,
+    this.destaque,
+    this.icone,
+    this.cor,
   });
 
   factory Categoria.fromJson(Map<String, dynamic> json) =>

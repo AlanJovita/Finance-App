@@ -2,6 +2,7 @@ import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:finance_app/widgets/fluxo_form_dialog.dart';
 import 'package:flutter/material.dart';
 import '../models/fluxo_caixa.dart';
+import '../models/resumo_fluxo.dart';
 import '../services/api_service.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/shimmer_widgets.dart';
@@ -15,14 +16,14 @@ enum TipoFluxo {
   receita(
     titulo: 'Receitas',
     singular: 'receita',
-    filtro: 'tipo_fluxo=1',
+    codigo: 1,
     tipoDialogo: 'receita',
     icone: Icons.attach_money,
   ),
   despesa(
     titulo: 'Despesas',
     singular: 'despesa',
-    filtro: 'tipo_fluxo=2',
+    codigo: 2,
     tipoDialogo: 'despesa',
     icone: Icons.remove_circle_outline,
   );
@@ -30,7 +31,7 @@ enum TipoFluxo {
   const TipoFluxo({
     required this.titulo,
     required this.singular,
-    required this.filtro,
+    required this.codigo,
     required this.tipoDialogo,
     required this.icone,
   });
@@ -41,8 +42,8 @@ enum TipoFluxo {
   /// Nome no singular, para textos como "Nova receita".
   final String singular;
 
-  /// Filtro enviado para `listFluxos`.
-  final String filtro;
+  /// Valor de `tipo_fluxo` na API: 1 entrada, 2 saída.
+  final int codigo;
 
   /// Valor esperado por [FluxoFormDialog].
   final String tipoDialogo;
@@ -64,27 +65,92 @@ class FluxosPage extends StatefulWidget {
 }
 
 class _FluxosPageState extends State<FluxosPage> {
-  late Future<List<FluxoCaixa>> _fluxosFuture;
+  late Future<List<ResumoMes>> _mesesFuture;
   final ApiService _apiService = ApiService();
   List<dynamic> _categorias = [];
   final Set<String> _expandedMonths = {};
+
+  /// Lançamentos já carregados, por mês. Um mês só entra aqui quando é aberto —
+  /// é o que evita baixar o histórico inteiro da loja para montar a tela.
+  final Map<String, List<FluxoCaixa>> _itensPorMes = {};
+  final Set<String> _carregando = {};
+  final Map<String, Object> _erroPorMes = {};
 
   TipoFluxo get _tipo => widget.tipo;
 
   @override
   void initState() {
     super.initState();
-    _loadFluxos();
+    _loadMeses();
     _loadCategorias();
     // Expande o mês atual por padrão
     final now = DateTime.now();
     _expandedMonths.add('${now.year}-${now.month}');
   }
 
-  void _loadFluxos() {
+  void _loadMeses() {
     setState(() {
-      _fluxosFuture = _apiService.listFluxos(_tipo.filtro);
+      _itensPorMes.clear();
+      _erroPorMes.clear();
+      _mesesFuture = _apiService.getResumoMensal(tipo: _tipo.codigo);
     });
+  }
+
+  /// Recarrega o que está na tela depois de criar, editar ou excluir: os totais
+  /// dos meses mudam, e os meses abertos precisam refletir a alteração.
+  void _recarregar() {
+    final abertos = Set<String>.from(_expandedMonths);
+    _loadMeses();
+    for (final chave in abertos) {
+      _carregarMes(chave);
+    }
+  }
+
+  Future<void> _carregarMes(String chave) async {
+    if (_carregando.contains(chave)) return;
+
+    setState(() {
+      _carregando.add(chave);
+      _erroPorMes.remove(chave);
+    });
+
+    try {
+      // "Sem data" não tem intervalo: vem sem recorte e o servidor devolve os
+      // lançamentos sem vencimento junto — por isso o filtro local abaixo.
+      final (de, ate) = _intervaloDoMes(chave);
+
+      final pagina = await _apiService.listFluxosPagina(
+        tipo: _tipo.codigo,
+        de: de,
+        ate: ate,
+        porPagina: 500,
+      );
+
+      var itens = pagina.itens;
+      if (chave == 'sem-data') {
+        itens = itens.where((f) => f.dataVencimento == null).toList();
+      }
+
+      if (!mounted) return;
+      setState(() => _itensPorMes[chave] = itens);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _erroPorMes[chave] = e);
+    } finally {
+      if (mounted) setState(() => _carregando.remove(chave));
+    }
+  }
+
+  /// Primeiro e último dia do mês da chave `ano-mes`.
+  (DateTime?, DateTime?) _intervaloDoMes(String chave) {
+    if (chave == 'sem-data') return (null, null);
+
+    final partes = chave.split('-');
+    final ano = int.parse(partes[0]);
+    final mes = int.parse(partes[1]);
+
+    // Dia 0 do mês seguinte é o último dia deste — evita a tabela de 28/30/31.
+    return (DateTime(ano, mes, 1), DateTime(ano, mes + 1, 0));
   }
 
   Future<void> _loadCategorias() async {
@@ -108,11 +174,6 @@ class _FluxosPageState extends State<FluxosPage> {
     }
   }
 
-  String _getMonthYearKey(DateTime? date) {
-    if (date == null) return 'sem-data';
-    return '${date.year}-${date.month}';
-  }
-
   String _getMonthYearLabel(DateTime date) {
     const months = [
       'Janeiro',
@@ -131,34 +192,6 @@ class _FluxosPageState extends State<FluxosPage> {
     return '${months[date.month - 1]} ${date.year}';
   }
 
-  Map<String, List<FluxoCaixa>> _groupByMonth(List<FluxoCaixa> fluxos) {
-    final Map<String, List<FluxoCaixa>> grouped = {};
-
-    for (var fluxo in fluxos) {
-      final key = _getMonthYearKey(fluxo.dataVencimento);
-      grouped.putIfAbsent(key, () => []).add(fluxo);
-    }
-
-    return grouped;
-  }
-
-  List<String> _getSortedMonthKeys(Map<String, List<FluxoCaixa>> grouped) {
-    final keys = grouped.keys.toList();
-    keys.sort((a, b) {
-      if (a == 'sem-data') return 1;
-      if (b == 'sem-data') return -1;
-
-      final partsA = a.split('-');
-      final partsB = b.split('-');
-      final dateA = DateTime(int.parse(partsA[0]), int.parse(partsA[1]));
-      final dateB = DateTime(int.parse(partsB[0]), int.parse(partsB[1]));
-
-      return dateB.compareTo(dateA); // Mais novo primeiro
-    });
-
-    return keys;
-  }
-
   void _showFormDialog({FluxoCaixa? fluxo}) {
     showDialog(
       context: context,
@@ -167,7 +200,7 @@ class _FluxosPageState extends State<FluxosPage> {
           tipoFluxo: _tipo.tipoDialogo,
           fluxo: fluxo,
           onSave: () {
-            _loadFluxos();
+            _recarregar();
             Navigator.of(context).pop();
           },
         );
@@ -200,7 +233,7 @@ class _FluxosPageState extends State<FluxosPage> {
 
     if (confirm == true) {
       await _apiService.deleteFluxo(fluxo.id!, fluxo.idRef ?? 0);
-      _loadFluxos();
+      _recarregar();
     }
   }
 
@@ -218,8 +251,8 @@ class _FluxosPageState extends State<FluxosPage> {
         ],
       ),
       drawer: const AppDrawer(),
-      body: FutureBuilder<List<FluxoCaixa>>(
-        future: _fluxosFuture,
+      body: FutureBuilder<List<ResumoMes>>(
+        future: _mesesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return ShimmerWidgets.listFluxosShimmer(context);
@@ -231,54 +264,76 @@ class _FluxosPageState extends State<FluxosPage> {
             );
           }
 
-          final fluxos = snapshot.data!;
+          // Já vem agregado e ordenado do banco: nada a somar nem classificar.
+          final meses = snapshot.data!;
 
-          // Ordena por data (mais nova primeiro)
-          fluxos.sort((a, b) {
-            if (a.dataVencimento == null) return 1;
-            if (b.dataVencimento == null) return -1;
-            return b.dataVencimento!.compareTo(a.dataVencimento!);
-          });
-
-          final grouped = _groupByMonth(fluxos);
-          final sortedMonthKeys = _getSortedMonthKeys(grouped);
-
-          return ListView.builder(
-            padding: context.responsivePadding(),
-            itemCount: sortedMonthKeys.length,
-            itemBuilder: (context, index) {
-              final monthKey = sortedMonthKeys[index];
-              final doMes = grouped[monthKey]!;
-
-              return _buildMes(monthKey, doMes);
-            },
+          return RefreshIndicator(
+            onRefresh: () async => _recarregar(),
+            child: ListView.builder(
+              padding: context.responsivePadding(),
+              itemCount: meses.length,
+              itemBuilder: (context, index) => _buildMes(meses[index]),
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _buildMes(String monthKey, List<FluxoCaixa> doMes) {
-    final isExpanded = _expandedMonths.contains(monthKey);
-    final totalMes = doMes.fold<double>(0.0, (sum, f) => sum + (f.valor ?? 0.0));
+  Widget _buildMes(ResumoMes mes) {
+    final chave = mes.chave;
+    final isExpanded = _expandedMonths.contains(chave);
 
-    String monthLabel;
-    if (monthKey == 'sem-data') {
-      monthLabel = 'Sem data';
-    } else {
-      final parts = monthKey.split('-');
-      monthLabel = _getMonthYearLabel(
-        DateTime(int.parse(parts[0]), int.parse(parts[1])),
-      );
-    }
+    final label =
+        mes.semData
+            ? 'Sem data'
+            : _getMonthYearLabel(DateTime(mes.ano!, mes.mes!));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildCabecalhoMes(monthKey, monthLabel, totalMes, doMes.length, isExpanded),
-        if (isExpanded) ...doMes.map(_buildItem),
+        _buildCabecalhoMes(
+          chave,
+          label,
+          mes.total,
+          mes.quantidade,
+          isExpanded,
+        ),
+        if (isExpanded) ..._buildConteudoMes(chave),
       ],
     );
+  }
+
+  /// Corpo de um mês aberto: carregando, erro ou os lançamentos.
+  List<Widget> _buildConteudoMes(String chave) {
+    if (_carregando.contains(chave)) {
+      return [
+        const Padding(
+          padding: EdgeInsets.all(AppSpacing.lg),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+
+    final erro = _erroPorMes[chave];
+    if (erro != null) {
+      return [
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
+            children: [
+              Expanded(child: Text('Erro ao carregar: $erro')),
+              TextButton(
+                onPressed: () => _carregarMes(chave),
+                child: const Text('Tentar de novo'),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    return (_itensPorMes[chave] ?? const <FluxoCaixa>[]).map(_buildItem).toList();
   }
 
   Widget _buildCabecalhoMes(
@@ -306,6 +361,10 @@ class _FluxosPageState extends State<FluxosPage> {
             _expandedMonths.add(monthKey);
           }
         });
+        // Busca os lançamentos na primeira abertura; depois ficam em memória.
+        if (!isExpanded && !_itensPorMes.containsKey(monthKey)) {
+          _carregarMes(monthKey);
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(

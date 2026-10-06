@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/fluxo_caixa.dart';
 import '../models/categoria.dart';
+import '../models/subcategoria.dart';
 import '../models/caixa.dart';
 import '../models/relatorio_mensal.dart';
 import '../models/relatorio_semanal.dart';
+import '../models/resumo_fluxo.dart';
 import '../models/boleto.dart';
 import 'api_config.dart';
 import 'global_state.dart';
@@ -117,32 +119,126 @@ class ApiService {
     }
   }
 
-  Future<List<FluxoCaixa>> listFluxos(String where) async {
+  /// Total por mês, somado no banco.
+  ///
+  /// Substituiu o `listFluxos(where)`, que mandava uma cláusula SQL pela URL e
+  /// baixava o histórico inteiro da loja para somar em Dart. Aqui trafegam
+  /// algumas dezenas de bytes por mês em vez de todos os lançamentos.
+  Future<List<ResumoMes>> getResumoMensal({
+    required int tipo,
+    DateTime? de,
+    DateTime? ate,
+  }) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{'tipo': '$tipo'};
+    if (de != null) params['de'] = _data(de);
+    if (ate != null) params['ate'] = _data(ate);
+
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final uri = Uri.parse(
+        '$_baseUrl/finance/fluxo/resumo/mensal/$idLoja',
+      ).replace(queryParameters: params);
 
       final response = await _handleRequest(
-        () =>
-            http.get(Uri.parse('$_baseUrl/finance/fluxo/list/$idLoja/$where')),
-        'listFluxos',
+        () => http.get(uri),
+        'getResumoMensal',
       );
 
       if (response['success'] == true) {
-        final List<dynamic> list = response['data'];
-        return list.map((item) => FluxoCaixa.fromJson(item)).toList();
-      } else {
-        throw Exception(response['msg'] ?? 'Erro ao listar fluxos.');
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((e) => ResumoMes.fromJson(e)).toList();
       }
+      throw Exception(response['msg'] ?? 'Erro ao carregar o resumo mensal.');
     } catch (e, stackTrace) {
       await _logger.logError(
-        'ApiService.listFluxos',
+        'ApiService.getResumoMensal',
         e,
         stackTrace: stackTrace,
-        additionalInfo: {'where': where},
+        additionalInfo: params,
       );
       rethrow;
     }
   }
+
+  /// Uma página de lançamentos, filtrada por tipo e intervalo de vencimento.
+  Future<PaginaFluxos> listFluxosPagina({
+    required int tipo,
+    DateTime? de,
+    DateTime? ate,
+    int pagina = 1,
+    int porPagina = 100,
+  }) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{
+      'tipo': '$tipo',
+      'pagina': '$pagina',
+      'por_pagina': '$porPagina',
+    };
+    if (de != null) params['de'] = _data(de);
+    if (ate != null) params['ate'] = _data(ate);
+
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/finance/fluxo/list/$idLoja',
+      ).replace(queryParameters: params);
+
+      final response = await _handleRequest(
+        () => http.get(uri),
+        'listFluxosPagina',
+      );
+
+      if (response['success'] == true) {
+        return PaginaFluxos.fromJson(response['data'] as Map<String, dynamic>);
+      }
+      throw Exception(response['msg'] ?? 'Erro ao listar lançamentos.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listFluxosPagina',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: params,
+      );
+      rethrow;
+    }
+  }
+
+  /// Receitas, despesas e saldo do período — previsto e realizado.
+  Future<ResumoFluxo> getResumoFluxo({DateTime? de, DateTime? ate}) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{};
+    if (de != null) params['de'] = _data(de);
+    if (ate != null) params['ate'] = _data(ate);
+
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/finance/fluxo/resumo/$idLoja',
+      ).replace(queryParameters: params.isEmpty ? null : params);
+
+      final response = await _handleRequest(
+        () => http.get(uri),
+        'getResumoFluxo',
+      );
+
+      if (response['success'] == true) {
+        return ResumoFluxo.fromJson(response['data'] as Map<String, dynamic>);
+      }
+      throw Exception(response['msg'] ?? 'Erro ao carregar o resumo.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getResumoFluxo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: params,
+      );
+      rethrow;
+    }
+  }
+
+  /// A API espera YYYY-MM-DD; `toIso8601String` traria hora junto.
+  static String _data(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 
   Future<Map<String, dynamic>> createFluxo(FluxoCaixa fluxo) async {
     try {
@@ -274,7 +370,9 @@ class ApiService {
     }
   }
 
-  Future<bool> createCategoria(Categoria categoria) async {
+  /// Devolve o id gerado, para o seletor já deixar marcada a categoria que o
+  /// usuário acabou de criar. Null em falha.
+  Future<int?> createCategoria(Categoria categoria) async {
     try {
       final response = await _handleRequest(
         () => http.post(
@@ -284,7 +382,8 @@ class ApiService {
         ),
         'createCategoria',
       );
-      return response['success'] == true;
+      if (response['success'] != true) return null;
+      return _idCriado(response);
     } catch (e, stackTrace) {
       await _logger.logError(
         'ApiService.createCategoria',
@@ -292,7 +391,70 @@ class ApiService {
         stackTrace: stackTrace,
         additionalInfo: {'categoria': categoria.toJson()},
       );
-      return false;
+      return null;
+    }
+  }
+
+  /// O id do INSERT vem em `data: [{id: N}]`. Uma API mais antiga responde
+  /// `data: []` — aí o registro foi criado, mas não dá para selecioná-lo.
+  int? _idCriado(Map<String, dynamic> response) {
+    final data = response['data'];
+    if (data is List && data.isNotEmpty && data.first is Map) {
+      final id = (data.first as Map)['id'];
+      if (id is int) return id;
+      if (id is String) return int.tryParse(id);
+    }
+    return null;
+  }
+
+  // Endpoints de Subcategoria
+  /// Todas as subcategorias da loja de uma vez — o modal de lançamento filtra
+  /// em memória por categoria, em vez de bater na API a cada troca de círculo.
+  Future<List<Subcategoria>> listSubcategorias() async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$_baseUrl/finance/subcategoria/cliente/$idLoja'),
+        ),
+        'listSubcategorias',
+      );
+      if (response['success'] == true && response['data'] != null) {
+        final List list = response['data'];
+        return list.map((item) => Subcategoria.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao listar subcategorias.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listSubcategorias',
+        e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Devolve o id gerado. Null em falha.
+  Future<int?> createSubcategoria(Subcategoria subcategoria) async {
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/subcategoria'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(subcategoria.toJson()),
+        ),
+        'createSubcategoria',
+      );
+      if (response['success'] != true) return null;
+      return _idCriado(response);
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.createSubcategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'subcategoria': subcategoria.toJson()},
+      );
+      return null;
     }
   }
 
@@ -475,14 +637,22 @@ class ApiService {
     }
   }
 
-  /// Login usando CNPJ (para acesso direto via URL)
-  Future<Map<String, dynamic>> loginByCNPJ(String cnpj) async {
+  /// Troca o token da URL pelos `id_cliente` a que ele dá acesso.
+  ///
+  /// O token é opaco e validado no servidor contra o hash guardado. Substituiu
+  /// `POST /login/cnpj`, que entregava os ids a partir de um CNPJ — e CNPJ é
+  /// público, então aquele endpoint não autenticava ninguém.
+  ///
+  /// A API responde 401 sem dizer se o token não existe, foi revogado ou o
+  /// usuário está bloqueado. Não tente distinguir aqui: a indistinção é
+  /// deliberada, para a rota não virar oráculo de quem sonda tokens.
+  Future<List<int>> loginByToken(String token) async {
     try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/finance/login/cnpj'),
+            Uri.parse('$_baseUrl/finance/login/token'),
             headers: {'Content-Type': 'application/json'},
-            body: json.encode({'cnpj': cnpj}),
+            body: json.encode({'token': token}),
           )
           .timeout(
             const Duration(seconds: 30),
@@ -491,57 +661,58 @@ class ApiService {
             },
           );
 
-      // A API responde erros com status != 200 (ex.: 404 para CNPJ não
-      // encontrado) mas sempre envia a mensagem no corpo — usa ela quando existir
-      Map<String, dynamic>? decodedJson;
+      Map<String, dynamic>? corpo;
       try {
-        decodedJson = json.decode(response.body) as Map<String, dynamic>;
+        corpo = json.decode(response.body) as Map<String, dynamic>;
       } catch (_) {
-        decodedJson = null;
+        corpo = null;
       }
 
-      if (response.statusCode == 200 && decodedJson != null) {
-        if (decodedJson['success'] == false) {
-          throw Exception(decodedJson['msg'] ?? 'CNPJ inválido');
-        }
-
-        await _logger.logInfo('Login por CNPJ realizado com sucesso: $cnpj');
-
-        return decodedJson;
-      } else {
-        throw Exception(
-          decodedJson?['msg'] ??
-              'Falha ao tentar realizar o login. Status: ${response.statusCode}',
-        );
+      if (response.statusCode == 200 && corpo?['success'] == true) {
+        return List<int>.from(corpo!['data'] as List<dynamic>);
       }
+
+      throw Exception(corpo?['msg'] ?? 'Link de acesso inválido');
     } catch (e, stackTrace) {
+      // O token NÃO entra no log: ele é a credencial. Antes o CNPJ ia junto,
+      // o que também era dado do cliente num log remoto.
       await _logger.logError(
-        'ApiService.loginByCNPJ',
+        'ApiService.loginByToken',
         e,
         stackTrace: stackTrace,
-        additionalInfo: {'cnpj': cnpj, 'baseUrl': _baseUrl},
       );
       rethrow;
     }
   }
 
-  // Boletos
+  /// Boletos em aberto da loja — **vem do api-master, não da finance-api**.
+  ///
+  /// Boleto aqui é a cobrança da Prêmio ao lojista, não movimento de caixa: o
+  /// Asaas é assunto do api-master, que já resolve o `customer_id` por
+  /// `cliente_pagamento` (com fallback por CNPJ) e **pagina** as cobranças — a
+  /// Asaas devolve 10 por página. A finance-api chegou a ter uma cópia disso,
+  /// sem paginação e lendo uma tabela inexistente; foi removida.
+  ///
+  /// O `cnpj` da URL só é usado do outro lado quando o cliente ainda não está
+  /// em `cliente_pagamento`. Mandá-lo cobre o cliente recém-criado.
   Future<List<Boleto>> checkBoletos(int idCliente) async {
+    final cnpj = GlobalState().cnpj;
+
     try {
       final response = await _handleRequest(
-        // O `/finance` faltava aqui e em nenhuma outra chamada do arquivo. Contra
-        // a api-master isso era 404; a finance-api serve os dois prefixos, mas
-        // deixar fora do padrão esconde o próximo erro igual.
-        () => http.get(Uri.parse('$_baseUrl/finance/boletos/check/$idCliente')),
+        () => http.get(
+          Uri.parse(
+            '$apiBaseUrl/v1/pagamento/link/${cnpj.isEmpty ? '0' : cnpj}/$idCliente',
+          ),
+        ),
         'checkBoletos',
       );
 
       if (response['success'] == true) {
         final List<dynamic> list = response['data'] ?? [];
         return list.map((item) => Boleto.fromJson(item)).toList();
-      } else {
-        throw Exception(response['msg'] ?? 'Erro ao buscar boletos.');
       }
+      throw Exception(response['message'] ?? 'Erro ao buscar boletos.');
     } catch (e, stackTrace) {
       await _logger.logError(
         'ApiService.checkBoletos',

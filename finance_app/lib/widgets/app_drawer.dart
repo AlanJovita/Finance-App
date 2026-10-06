@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
+import '../utils/auth_actions.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -11,7 +11,6 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final authProvider = Provider.of<AuthProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -98,7 +97,7 @@ class AppDrawer extends StatelessWidget {
                 _buildMenuItem(
                   context,
                   icon: Icons.dashboard,
-                  title: 'Dashboard',
+                  title: 'Resumo',
                   route: '/dashboard',
                 ),
                 _buildMenuItem(
@@ -152,8 +151,10 @@ class AppDrawer extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpacing.lg),
               child: ElevatedButton.icon(
                 onPressed: () {
+                  // Fecha o drawer antes de sair; o popUntil do sairDoApp é
+                  // sobre a pilha de rotas, não sobre o drawer aberto.
                   Navigator.pop(context);
-                  authProvider.logout();
+                  sairDoApp(context);
                 },
                 icon: const Icon(Icons.logout, color: Colors.white),
                 label: const Text('Sair'),

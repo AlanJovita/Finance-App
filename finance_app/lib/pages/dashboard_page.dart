@@ -5,12 +5,12 @@ import 'package:finance_app/models/relatorio_semanal.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
 import 'package:finance_app/services/global_state.dart';
+import 'package:finance_app/utils/auth_actions.dart';
 import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:finance_app/widgets/boletos_widget.dart';
 import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/shimmer_widgets.dart';
@@ -94,7 +94,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return Scaffold(
@@ -104,7 +103,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             const Icon(Icons.store, size: 24),
             const SizedBox(width: AppSpacing.sm),
-            Text(_caixa?.nomeLoja ?? 'Dashboard'),
+            Text(_caixa?.nomeLoja ?? 'Resumo'),
           ],
         ),
         actions: [
@@ -119,7 +118,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () => authProvider.logout(),
+            onPressed: () => sairDoApp(context),
             tooltip: 'Sair',
           ),
         ],
@@ -173,35 +172,13 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  /// O relevo neumórfico do dashboard: uma sombra escura de um lado e uma luz
-  /// do outro. Fica num helper porque se repete em três lugares.
-  List<BoxShadow> _relevo(ThemeData theme, {double distancia = 6}) {
-    final isDark = theme.brightness == Brightness.dark;
-    return [
-      BoxShadow(
-        color:
-            isDark
-                ? Colors.black.withValues(alpha: 0.6)
-                : Colors.grey.shade400,
-        offset: Offset(distancia, distancia),
-        blurRadius: 12,
-        spreadRadius: 1,
-      ),
-      BoxShadow(
-        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
-        offset: Offset(-distancia, -distancia),
-        blurRadius: 12,
-        spreadRadius: 1,
-      ),
-    ];
-  }
-
   Widget _buildMainCard(BuildContext context) {
     final caixa = _caixa;
     final theme = Theme.of(context);
 
     if (caixa == null) {
       return const Card(
+        elevation: AppElevation.none,
         child: Padding(
           padding: EdgeInsets.all(AppSpacing.lg),
           child: Text('Nenhum caixa disponível'),
@@ -224,8 +201,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return ClipRect(
       child: Card(
-        elevation: AppElevation.overlay,
-        shadowColor: Colors.black.withValues(alpha: 0.3),
+        elevation: AppElevation.none,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
@@ -320,7 +296,6 @@ class _DashboardPageState extends State<DashboardPage> {
           decoration: BoxDecoration(
             color: theme.cardColor,
             borderRadius: BorderRadius.circular(AppRadius.md),
-            boxShadow: _relevo(theme, distancia: 4),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -357,24 +332,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           decoration: BoxDecoration(
             color: cor,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: theme.brightness == Brightness.dark ? 0.9 : 0.5,
-                ),
-                blurRadius: 12,
-                offset: const Offset(4, 4),
-                spreadRadius: 1,
-              ),
-              BoxShadow(
-                color: cor.withValues(
-                  alpha: theme.brightness == Brightness.dark ? 0.2 : 0.5,
-                ),
-                blurRadius: 12,
-                offset: const Offset(-2, -2),
-                spreadRadius: 1,
-              ),
-            ],
           ),
           child: Padding(
             padding: const EdgeInsets.only(left: 30),
@@ -441,7 +398,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   width: 2,
                 )
                 : null,
-        boxShadow: _relevo(theme),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -571,7 +527,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final theme = Theme.of(context);
 
     return Card(
-      elevation: AppElevation.cardRaised,
+      elevation: AppElevation.none,
       color: color,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.md),

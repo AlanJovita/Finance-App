@@ -1,34 +1,39 @@
 import 'package:flutter/material.dart';
-import '../models/categoria.dart';
+import '../models/subcategoria.dart';
 import '../services/api_service.dart';
-import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/categoria_visuais.dart';
 import '../utils/responsive_utils.dart';
 import 'seletor_cor_icone.dart';
 
-/// Dialog para criar nova categoria.
+/// Dialog para criar nova subcategoria.
 ///
-/// Devolve o id da categoria criada no `pop`, para quem abriu já deixá-la
-/// selecionada. `tipo_fluxo` e `id_cliente` não aparecem no formulário: saem do
-/// tipo da movimentação e da loja logada.
-class CategoriaFormDialog extends StatefulWidget {
-  final int tipoFluxo;
+/// Devolve o id criado no `pop`. Não tem campo de cor: a subcategoria herda a
+/// da categoria pai a 70% de opacidade — daí [corCategoria], que só serve para
+/// pintar a prévia dos ícones aqui dentro.
+class SubcategoriaFormDialog extends StatefulWidget {
+  final int idCategoria;
+  final String nomeCategoria;
+  final Color corCategoria;
 
-  const CategoriaFormDialog({super.key, required this.tipoFluxo});
+  const SubcategoriaFormDialog({
+    super.key,
+    required this.idCategoria,
+    required this.nomeCategoria,
+    required this.corCategoria,
+  });
 
   @override
-  State<CategoriaFormDialog> createState() => _CategoriaFormDialogState();
+  State<SubcategoriaFormDialog> createState() => _SubcategoriaFormDialogState();
 }
 
-class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
+class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _descricaoController = TextEditingController();
   final ApiService _apiService = ApiService();
   bool _isLoading = false;
 
-  String _cor = CategoriaVisuais.paleta.first.hex;
   String? _icone;
   bool _destaque = true;
 
@@ -61,17 +66,15 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final novaCategoria = Categoria(
-        idLoja: GlobalState().firstIdLoja,
+      final nova = Subcategoria(
+        idCategoria: widget.idCategoria,
         descricao: _descricaoController.text.trim(),
         ativado: true,
-        tipoFluxo: widget.tipoFluxo,
         destaque: _destaque,
         icone: _icone,
-        cor: _cor,
       );
 
-      final novoId = await _apiService.createCategoria(novaCategoria);
+      final novoId = await _apiService.createSubcategoria(nova);
 
       if (!mounted) return;
 
@@ -82,7 +85,7 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
               children: [
                 Icon(Icons.check_circle, color: Colors.white),
                 SizedBox(width: AppSpacing.sm),
-                Expanded(child: Text('Categoria criada com sucesso!')),
+                Expanded(child: Text('Subcategoria criada com sucesso!')),
               ],
             ),
             backgroundColor: context.appColors.success,
@@ -92,29 +95,13 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
         );
         Navigator.of(context).pop(novoId);
       } else {
-        _showError('Não foi possível criar a categoria. Tente novamente.');
+        _showError('Não foi possível criar a subcategoria. Tente novamente.');
       }
     } catch (e) {
-      if (mounted) _showError(_mensagemDeErro(e));
+      if (mounted) _showError('Erro ao criar subcategoria: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  String _mensagemDeErro(Object e) {
-    final texto = e.toString();
-
-    if (texto.contains('FormatException') || texto.contains('not valid JSON')) {
-      return 'Erro no servidor: o endpoint de criação de categoria pode não estar '
-          'implementado na API. Verifique com o desenvolvedor backend.';
-    }
-    if (texto.contains('SocketException')) {
-      return 'Erro de conexão: verifique sua internet';
-    }
-    if (texto.contains('TimeoutException')) {
-      return 'Tempo esgotado: o servidor demorou muito para responder';
-    }
-    return 'Erro ao criar categoria: $texto';
   }
 
   @override
@@ -126,10 +113,12 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
             ? 400.0
             : 450.0;
 
-    final cor = CategoriaVisuais.cor(_cor);
+    final cor = widget.corCategoria.withValues(
+      alpha: CategoriaVisuais.opacidadeSubcategoria,
+    );
 
     return AlertDialog(
-      title: const Text('Nova Categoria'),
+      title: const Text('Nova Subcategoria'),
       contentPadding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,
@@ -145,13 +134,21 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text(
+                  'Em ${widget.nomeCategoria}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+
                 TextFormField(
                   controller: _descricaoController,
                   autofocus: true,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
                     isDense: true,
-                    labelText: 'Nome da Categoria',
+                    labelText: 'Nome da Subcategoria',
                     helperText: 'Mínimo 3 caracteres',
                   ),
                   validator: (value) {
@@ -161,12 +158,6 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
                     if (value.trim().length < 3) return 'Mínimo 3 caracteres';
                     return null;
                   },
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                SeletorCor(
-                  selecionada: _cor,
-                  onSelecionar: (hex) => setState(() => _cor = hex),
                 ),
                 const SizedBox(height: AppSpacing.md),
 

@@ -138,7 +138,7 @@ class _TokenLoginWrapperState extends State<TokenLoginWrapper> {
         Navigator.of(context).pushReplacementNamed('/dashboard');
       } else {
         setState(() {
-          _error = 'Token inválido ou expirado';
+          _error = 'Link de acesso inválido ou revogado';
           _isLoading = false;
         });
       }

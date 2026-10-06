@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/boleto.dart';
+import '../services/logger_service.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 
@@ -25,7 +27,7 @@ enum BoletoStatus {
   String get mensagem => switch (this) {
     BoletoStatus.vencido =>
       'Efetue o pagamento o quanto antes para evitar bloqueio',
-    _ => 'Efetue o pagamento clicando no link abaixo',
+    _ => 'Efetue o pagamento clicando no botão abaixo',
   };
 
   IconData get icone => switch (this) {
@@ -111,8 +113,7 @@ class _BoletosWidgetState extends State<BoletosWidget> {
     }
 
     return Card(
-      elevation: AppElevation.overlay,
-      shadowColor: Colors.black.withValues(alpha: 0.3),
+      elevation: AppElevation.none,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
@@ -168,7 +169,6 @@ class _BoletosWidgetState extends State<BoletosWidget> {
   Widget _buildBoletoCard(BuildContext context, Boleto boleto) {
     final theme = Theme.of(context);
     final cores = context.appColors;
-    final isDark = theme.brightness == Brightness.dark;
     final status = _getBoletoStatus(boleto);
     final statusColor = status.cor(cores);
     final dueDate = DateFormat('dd/MM/yyyy').format(boleto.dueDateParsed);
@@ -182,26 +182,6 @@ class _BoletosWidgetState extends State<BoletosWidget> {
         decoration: BoxDecoration(
           color: theme.cardColor,
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          boxShadow: [
-            // Sombra externa (neumorfismo)
-            BoxShadow(
-              color:
-                  isDark
-                      ? Colors.black.withValues(alpha: 0.5)
-                      : Colors.grey.shade400,
-              offset: const Offset(6, 6),
-              blurRadius: 12,
-            ),
-            // Luz (neumorfismo)
-            BoxShadow(
-              color:
-                  isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.white.withValues(alpha: 0.9),
-              offset: const Offset(-6, -6),
-              blurRadius: 12,
-            ),
-          ],
         ),
         child: Stack(
           children: [
@@ -340,7 +320,7 @@ class _BoletosWidgetState extends State<BoletosWidget> {
         const Divider(),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          'Clique no botão abaixo para copiar o link do boleto:',
+          'Clique no botão abaixo para abrir o boleto no navegador:',
           style: theme.textTheme.bodySmall?.copyWith(
             fontWeight: FontWeight.w500,
           ),
@@ -377,7 +357,7 @@ class _BoletosWidgetState extends State<BoletosWidget> {
         ),
         const SizedBox(height: AppSpacing.xl),
         ElevatedButton(
-          onPressed: () => _copiarLink(context, url, statusColor),
+          onPressed: () => _abrirBoleto(context, url, statusColor),
           style: ElevatedButton.styleFrom(
             backgroundColor: statusColor,
             foregroundColor: Colors.white,
@@ -389,9 +369,9 @@ class _BoletosWidgetState extends State<BoletosWidget> {
           child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('Copiar Link'),
+              Text('Abrir o Boleto'),
               SizedBox(width: AppSpacing.sm),
-              Icon(Icons.content_copy, size: 20),
+              Icon(Icons.open_in_new, size: 20),
             ],
           ),
         ),
@@ -399,28 +379,83 @@ class _BoletosWidgetState extends State<BoletosWidget> {
     );
   }
 
-  Future<void> _copiarLink(
+  /// Abre o boleto direto no navegador do usuário, em janela/aba externa, para
+  /// que ele possa efetuar o pagamento sem passos intermediários.
+  Future<void> _abrirBoleto(
     BuildContext context,
     String url,
     Color statusColor,
   ) async {
-    await Clipboard.setData(ClipboardData(text: url));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: AppSpacing.sm),
-              Text('Link copiado para a área de transferência!'),
-            ],
-          ),
-          backgroundColor: statusColor,
-          duration: const Duration(seconds: 2),
-        ),
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri.tryParse(url);
+
+    if (uri == null || !uri.hasScheme) {
+      await LoggerService().logError(
+        'BoletosWidget._abrirBoleto',
+        'URL do boleto inválida',
+        additionalInfo: {'url': url},
       );
-      Navigator.pop(context);
+      _mostrarFalha(messenger, url, statusColor);
+      return;
     }
+
+    try {
+      // externalApplication + _blank garantem janela/aba separada e em foco,
+      // priorizando o pagamento em vez de navegar dentro do app.
+      final aberto = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+        webOnlyWindowName: '_blank',
+      );
+
+      if (!aberto) {
+        await LoggerService().logError(
+          'BoletosWidget._abrirBoleto',
+          'Não foi possível abrir o boleto no navegador',
+          additionalInfo: {'url': url},
+        );
+        _mostrarFalha(messenger, url, statusColor);
+        return;
+      }
+
+      if (navigator.canPop()) navigator.pop();
+    } catch (e, s) {
+      await LoggerService().logError(
+        'BoletosWidget._abrirBoleto',
+        e,
+        stackTrace: s,
+        additionalInfo: {'url': url},
+      );
+      _mostrarFalha(messenger, url, statusColor);
+    }
+  }
+
+  /// Fallback quando o navegador não pode ser aberto: copia o link e avisa.
+  void _mostrarFalha(
+    ScaffoldMessengerState messenger,
+    String url,
+    Color statusColor,
+  ) {
+    Clipboard.setData(ClipboardData(text: url));
+    messenger.showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white),
+            SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                'Não foi possível abrir o navegador. '
+                'O link do boleto foi copiado.',
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: statusColor,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 }
 

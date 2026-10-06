@@ -82,7 +82,7 @@ class ShimmerWidgets {
         itemCount: 5,
         itemBuilder: (context, index) {
           return Card(
-            elevation: AppElevation.cardRaised,
+            elevation: AppElevation.none,
             margin: const EdgeInsets.only(bottom: AppSpacing.sm),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),

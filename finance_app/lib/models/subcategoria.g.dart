@@ -1,35 +1,32 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'categoria.dart';
+part of 'subcategoria.dart';
 
 // **************************************************************************
 // JsonSerializableGenerator
 // **************************************************************************
 
-Categoria _$CategoriaFromJson(Map<String, dynamic> json) => Categoria(
+Subcategoria _$SubcategoriaFromJson(Map<String, dynamic> json) => Subcategoria(
   id: _$JsonConverterFromJson<int, int?>(
     json['id'],
     const IdConverter().fromJson,
   ),
-  idLoja: (Categoria._readIdLoja(json, 'id_loja') as num).toInt(),
+  idCategoria: (json['id_categoria'] as num).toInt(),
   descricao: json['descricao'] as String,
   ativado: const AtivadoConverter().fromJson(json['ativado']),
-  tipoFluxo: (json['tipo_fluxo'] as num).toInt(),
   destaque: const AtivadoConverter().fromJson(json['destaque']),
   icone: json['icone'] as String?,
-  cor: json['cor'] as String?,
 );
 
-Map<String, dynamic> _$CategoriaToJson(Categoria instance) => <String, dynamic>{
-  'id': const IdConverter().toJson(instance.id),
-  'id_loja': instance.idLoja,
-  'descricao': instance.descricao,
-  'ativado': const AtivadoConverter().toJson(instance.ativado),
-  'tipo_fluxo': instance.tipoFluxo,
-  'destaque': const AtivadoConverter().toJson(instance.destaque),
-  'icone': instance.icone,
-  'cor': instance.cor,
-};
+Map<String, dynamic> _$SubcategoriaToJson(Subcategoria instance) =>
+    <String, dynamic>{
+      'id': const IdConverter().toJson(instance.id),
+      'id_categoria': instance.idCategoria,
+      'descricao': instance.descricao,
+      'ativado': const AtivadoConverter().toJson(instance.ativado),
+      'destaque': const AtivadoConverter().toJson(instance.destaque),
+      'icone': instance.icone,
+    };
 
 Value? _$JsonConverterFromJson<Json, Value>(
   Object? json,

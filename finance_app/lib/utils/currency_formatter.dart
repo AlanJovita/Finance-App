@@ -59,4 +59,23 @@ class CurrencyFormatter {
     if (value == null) return '0${"," + "0" * decimals}';
     return value.toStringAsFixed(decimals).replaceAll('.', ',');
   }
+
+  /// Lê de volta o que [formatValue] escreveu, desfazendo a máscara.
+  ///
+  /// Os dois últimos dígitos são sempre os centavos — o mesmo contrato do
+  /// [CurrencyInputFormatter], que preenche o campo a partir deles. Por isso
+  /// `.` e `,` são descartados em vez de interpretados: em "1.234,56" o ponto é
+  /// separador de milhar, e tratá-lo como decimal leria 1,234.
+  ///
+  /// Exemplo: "1.234,56" -> 1234.56
+  ///
+  /// Retorna null quando não sobra nenhum dígito.
+  static double? parse(String? text) {
+    if (text == null) return null;
+
+    final digitos = text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitos.isEmpty) return null;
+
+    return int.parse(digitos) / 100;
+  }
 }
