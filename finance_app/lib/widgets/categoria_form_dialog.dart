@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/categoria.dart';
 import '../services/api_service.dart';
+import '../services/logger_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
@@ -26,6 +27,7 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _descricaoController = TextEditingController();
   final ApiService _apiService = ApiService();
+  final LoggerService _logger = LoggerService();
   bool _isLoading = false;
 
   String _cor = CategoriaVisuais.paleta.first.hex;
@@ -97,7 +99,13 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
       // 0 avisa quem abriu que a categoria existe mas não dá para
       // pré-selecioná-la — diferente de fechar sem valor, que é cancelamento.
       Navigator.of(context).pop(novoId ?? 0);
-    } catch (e) {
+    } catch (e, s) {
+      await _logger.logError(
+        'CategoriaFormDialog._salvar',
+        e,
+        stackTrace: s,
+        additionalInfo: {'tipoFluxo': widget.tipoFluxo},
+      );
       if (mounted) _showError(_mensagemDeErro(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -122,9 +130,16 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
         }
       }
       return achado;
-    } catch (_) {
+    } catch (e, s) {
       // Sem o id a categoria apenas não nasce selecionada; não é motivo para
-      // transformar uma criação bem-sucedida em erro.
+      // transformar uma criação bem-sucedida em erro — mas vai para o log,
+      // porque a causa é uma falha de leitura da lista.
+      await _logger.logError(
+        'CategoriaFormDialog._idPelaDescricao',
+        e,
+        stackTrace: s,
+        additionalInfo: {'descricao': criada.descricao},
+      );
       return null;
     }
   }

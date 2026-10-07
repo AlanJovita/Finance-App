@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'fluxo_caixa.g.dart';
@@ -94,8 +95,12 @@ class FluxoCaixa {
         idRef: _safeCast<int>(json['id_ref']),
       );
     } catch (e) {
-      print('Erro ao converter FluxoCaixa.fromJson: $e');
-      print('JSON recebido: $json');
+      // `print`, e não o LoggerService: `fromJson` roda uma vez por item da
+      // resposta, e uma lista malformada geraria uma linha de log remoto por
+      // registro. O `rethrow` entrega o erro ao ApiService, que o registra uma
+      // única vez com o endpoint e o corpo da resposta.
+      debugPrint('Erro ao converter FluxoCaixa.fromJson: $e');
+      debugPrint('JSON recebido: $json');
       rethrow;
     }
   }
@@ -125,7 +130,7 @@ class FluxoCaixa {
         return DateTime(year, month, day);
       }
     } catch (e) {
-      print('Erro ao fazer parse da data: $dateStr - $e');
+      debugPrint('Erro ao fazer parse da data: $dateStr - $e');
     }
 
     return null;

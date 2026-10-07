@@ -5,6 +5,7 @@ import '../models/fluxo_caixa.dart';
 import '../models/resumo_fluxo.dart';
 import '../models/subcategoria.dart';
 import '../services/api_service.dart';
+import '../services/logger_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
@@ -83,6 +84,7 @@ class FluxosPage extends StatefulWidget {
 
 class _FluxosPageState extends State<FluxosPage> {
   final ApiService _apiService = ApiService();
+  final LoggerService _logger = LoggerService();
   final TextEditingController _buscaController = TextEditingController();
 
   /// Mês em foco, sempre no dia 1 — a tela mostra um mês por vez.
@@ -179,10 +181,17 @@ class _FluxosPageState extends State<FluxosPage> {
           break;
         }
       }
-    } catch (e) {
+    } catch (e, s) {
       // O resumo é acessório: sem ele a tela perde o atalho de meses, não a
-      // lista. Falhar aqui não pode derrubar o que já está em foco.
+      // lista. Falhar aqui não pode derrubar o que já está em foco — mas tem
+      // que aparecer no log, senão a tela só "nasce sem meses".
       debugPrint('Erro ao carregar o resumo mensal: $e');
+      await _logger.logError(
+        'FluxosPage._carregarResumoMeses',
+        e,
+        stackTrace: s,
+        additionalInfo: {'tipo': _tipo.codigo},
+      );
     }
   }
 
@@ -215,7 +224,13 @@ class _FluxosPageState extends State<FluxosPage> {
 
       if (!mounted || _geracao[chave] != geracao) return;
       setState(() => _itensPorMes[chave] = pagina.itens);
-    } catch (e) {
+    } catch (e, s) {
+      await _logger.logError(
+        'FluxosPage._carregarMes',
+        e,
+        stackTrace: s,
+        additionalInfo: {'tipo': _tipo.codigo, 'mes': chave},
+      );
       if (!mounted || _geracao[chave] != geracao) return;
       setState(() => _erroPorMes[chave] = e);
     } finally {
@@ -239,8 +254,14 @@ class _FluxosPageState extends State<FluxosPage> {
         _semData =
             pagina.itens.where((f) => f.dataVencimento == null).toList();
       });
-    } catch (e) {
+    } catch (e, s) {
       debugPrint('Erro ao carregar lançamentos sem data: $e');
+      await _logger.logError(
+        'FluxosPage._carregarSemData',
+        e,
+        stackTrace: s,
+        additionalInfo: {'tipo': _tipo.codigo},
+      );
     }
   }
 
@@ -267,8 +288,15 @@ class _FluxosPageState extends State<FluxosPage> {
           _categoriaFiltro = 0;
         }
       });
-    } catch (e) {
+    } catch (e, s) {
       debugPrint('Erro ao carregar categorias: $e');
+      // Sem as categorias os cards perdem nome, ícone e cor. A tela continua
+      // de pé, então sem log o sintoma chega como "sumiram os ícones".
+      await _logger.logError(
+        'FluxosPage._carregarCategorias',
+        e,
+        stackTrace: s,
+      );
     }
   }
 
@@ -442,7 +470,13 @@ class _FluxosPageState extends State<FluxosPage> {
         ),
       );
       _recarregar();
-    } catch (e) {
+    } catch (e, s) {
+      await _logger.logError(
+        'FluxosPage._estornar',
+        e,
+        stackTrace: s,
+        additionalInfo: {'idFluxo': fluxo.id, 'tipo': _tipo.codigo},
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

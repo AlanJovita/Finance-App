@@ -5,6 +5,7 @@ import 'package:finance_app/models/relatorio_semanal.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
 import 'package:finance_app/services/global_state.dart';
+import 'package:finance_app/services/logger_service.dart';
 import 'package:finance_app/utils/auth_actions.dart';
 import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:finance_app/widgets/boletos_widget.dart';
@@ -26,6 +27,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  final LoggerService _logger = LoggerService();
   Caixa? _caixa;
   RelatorioSemanal? _relatorioSemanal;
   List<RelatorioMensal> _relatoriosMensais = [];
@@ -72,9 +74,15 @@ class _DashboardPageState extends State<DashboardPage> {
         if (idCliente != 0) {
           boletos = await apiService.checkBoletos(idCliente);
         }
-      } catch (e) {
-        // Se falhar ao buscar boletos, apenas ignora e continua
+      } catch (e, s) {
+        // Boleto é um bloco do painel, não o painel: a falha não interrompe o
+        // resto do carregamento, só sai no log.
         debugPrint('Erro ao buscar boletos: $e');
+        await _logger.logError(
+          'DashboardPage._loadData.boletos',
+          e,
+          stackTrace: s,
+        );
       }
 
       setState(() {
@@ -84,7 +92,8 @@ class _DashboardPageState extends State<DashboardPage> {
         _boletos = boletos;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, s) {
+      await _logger.logError('DashboardPage._loadData', e, stackTrace: s);
       setState(() {
         _error = e.toString();
         _isLoading = false;

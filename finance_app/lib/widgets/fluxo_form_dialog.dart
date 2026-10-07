@@ -3,6 +3,7 @@ import '../models/categoria.dart';
 import '../models/fluxo_caixa.dart';
 import '../models/subcategoria.dart';
 import '../services/api_service.dart';
+import '../services/logger_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
@@ -42,6 +43,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   final _valorController = TextEditingController();
   final _parcelasController = TextEditingController();
   final ApiService _apiService = ApiService();
+  final LoggerService _logger = LoggerService();
   bool _isLoading = false;
   DateTime? _dataVencimento;
   bool _confirmado = false;
@@ -121,8 +123,16 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           }
         }
       });
-    } catch (e) {
+    } catch (e, s) {
       debugPrint('Erro ao carregar categorias: $e');
+      // Sem isto a falha é invisível: o seletor abre vazio e o lojista conclui
+      // que não tem categoria cadastrada.
+      await _logger.logError(
+        'FluxoFormDialog._loadCategorias',
+        e,
+        stackTrace: s,
+        additionalInfo: {'tipoFluxo': widget.tipoFluxo},
+      );
     }
   }
 
@@ -144,8 +154,13 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           _habilitarSubcategorias = true;
         }
       });
-    } catch (e) {
+    } catch (e, s) {
       debugPrint('Erro ao carregar subcategorias: $e');
+      await _logger.logError(
+        'FluxoFormDialog._loadSubcategorias',
+        e,
+        stackTrace: s,
+      );
     }
   }
 
@@ -355,7 +370,20 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         // No parcelamento a primeira parcela vence nesta data, então é também
         // para este mês que a lista deve ir.
         widget.onSave(_dataVencimento ?? DateTime.now());
-      } catch (e) {
+      } catch (e, s) {
+        // No parcelamento o POST é um por parcela: saber em qual repetição
+        // parou é a diferença entre "nada foi salvo" e "metade foi".
+        await _logger.logError(
+          'FluxoFormDialog._salvar',
+          e,
+          stackTrace: s,
+          additionalInfo: {
+            'edicao': widget.fluxo != null,
+            'tipoFluxo': widget.tipoFluxo,
+            'repeticao': _repeticao,
+            'numeroParcelas': _numeroParcelas,
+          },
+        );
         if (mounted) {
           ScaffoldMessenger.of(
             context,

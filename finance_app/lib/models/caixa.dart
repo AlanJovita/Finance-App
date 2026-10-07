@@ -130,9 +130,11 @@ class Caixa {
         totalPedidoEstornado: _safeCast<int>(json['total_pedido_estornado']),
       );
     } catch (e) {
-      // Adicione aqui um log do erro se desejar (ex: print, logger, etc.)
-      // print('Erro ao desserializar Caixa: $e');
-      // Lança uma exceção mais informativa para a camada que chamou.
+      // Não manda para o LoggerService de propósito: `fromJson` roda uma vez por
+      // item da resposta, e um payload malformado geraria uma linha de log por
+      // registro. Quem chamou é o ApiService, que loga a requisição inteira —
+      // com endpoint e corpo — numa única linha. Aqui só enriquecemos a exceção
+      // que sobe para lá.
       throw FormatException(
         'Falha ao converter o JSON para o modelo Caixa: $e',
       );

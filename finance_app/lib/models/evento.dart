@@ -1,3 +1,5 @@
+import '../services/api_config.dart';
+
 class Evento {
   final int idCliente;
   final String data;
@@ -5,12 +7,16 @@ class Evento {
   final int origem;
   final int idUsuarioLocal;
 
+  /// Qual produto gravou a linha — ver [Erro.idSoftware].
+  final int idSoftware;
+
   Evento({
     required this.idCliente,
     required this.data,
     required this.descricao,
     required this.origem,
     required this.idUsuarioLocal,
+    this.idSoftware = idSoftwareFinance,
   });
 
   Map<String, dynamic> toJson() {
@@ -20,6 +26,7 @@ class Evento {
       'descricao': descricao,
       'origem': origem,
       'id_usuario_local': idUsuarioLocal,
+      'id_software': idSoftware,
     };
   }
 
@@ -30,6 +37,7 @@ class Evento {
       descricao: json['descricao'] as String,
       origem: json['origem'] as int,
       idUsuarioLocal: json['id_usuario_local'] as int,
+      idSoftware: json['id_software'] as int? ?? idSoftwareFinance,
     );
   }
 }

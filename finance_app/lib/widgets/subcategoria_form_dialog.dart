@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/subcategoria.dart';
 import '../services/api_service.dart';
+import '../services/logger_service.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/categoria_visuais.dart';
@@ -32,6 +33,7 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _descricaoController = TextEditingController();
   final ApiService _apiService = ApiService();
+  final LoggerService _logger = LoggerService();
   bool _isLoading = false;
 
   String? _icone;
@@ -100,7 +102,13 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
       // 0 avisa quem abriu que a subcategoria existe mas não dá para
       // pré-selecioná-la — diferente de fechar sem valor, que é cancelamento.
       Navigator.of(context).pop(novoId ?? 0);
-    } catch (e) {
+    } catch (e, s) {
+      await _logger.logError(
+        'SubcategoriaFormDialog._salvar',
+        e,
+        stackTrace: s,
+        additionalInfo: {'idCategoria': widget.idCategoria},
+      );
       if (mounted) _showError('Erro ao criar subcategoria: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -125,9 +133,16 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
         }
       }
       return achado;
-    } catch (_) {
+    } catch (e, s) {
       // Sem o id a subcategoria apenas não nasce selecionada; não é motivo
-      // para transformar uma criação bem-sucedida em erro.
+      // para transformar uma criação bem-sucedida em erro — mas vai para o log,
+      // porque a causa é uma falha de leitura da lista.
+      await _logger.logError(
+        'SubcategoriaFormDialog._idPelaDescricao',
+        e,
+        stackTrace: s,
+        additionalInfo: {'descricao': criada.descricao},
+      );
       return null;
     }
   }

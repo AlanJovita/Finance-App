@@ -6,6 +6,17 @@ import '../models/evento.dart';
 import '../models/erro.dart';
 import 'api_config.dart';
 
+/// Log da aplicação: manda erro e evento para o log central do api-master.
+///
+/// Os erros vão para `POST /v1/erro`, que persiste na tabela `log` do Supabase e
+/// alimenta o painel de erros usado pelo suporte (ranking por erro e por
+/// cliente). Toda linha carrega [idSoftwareFinance] — é o que separa estes logs
+/// dos dos outros produtos que gravam na mesma tabela — e [versaoLog], que é o
+/// que distingue um erro do app de um erro da finance-api.
+///
+/// Nenhum método relança nada: falha de rede ao registrar um log não pode virar
+/// o erro que a tela vai mostrar. O padrão em todo o app é `catch`, `await
+/// _logger.logError(...)`, depois rethrow ou `return false`.
 class LoggerService {
   static final LoggerService _instance = LoggerService._internal();
   factory LoggerService() => _instance;
@@ -117,14 +128,14 @@ class LoggerService {
         idCliente: GlobalState().firstIdLoja,
         data: timestamp,
         descricao: descricao,
-        versao: 'v1.0.0.0',
+        versao: versaoLog,
         classe: classe,
         metodo: metodo,
         linha: linha,
         qtd: 1,
         status: 0,
         classificacao: 0,
-        origem: 10,
+        origem: idSoftwareFinance,
         idUsuarioLocal: 0,
         idComputadorLocal: 0,
       );
@@ -146,7 +157,7 @@ class LoggerService {
         idCliente: GlobalState().firstIdLoja,
         data: timestamp,
         descricao: message,
-        origem: 10,
+        origem: idSoftwareFinance,
         idUsuarioLocal: 0,
       );
 

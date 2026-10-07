@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/fluxo_caixa.dart';
 import '../services/api_service.dart';
+import '../services/logger_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
@@ -38,6 +39,7 @@ class _PagamentoDialogState extends State<PagamentoDialog> {
   final _encargosController = TextEditingController();
   final _descontosController = TextEditingController();
   final ApiService _apiService = ApiService();
+  final LoggerService _logger = LoggerService();
 
   bool _salvando = false;
   String? _erro;
@@ -85,7 +87,17 @@ class _PagamentoDialogState extends State<PagamentoDialog> {
       await _apiService.updateFluxo(atualizado);
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (e) {
+    } catch (e, s) {
+      await _logger.logError(
+        'PagamentoDialog._confirmar',
+        e,
+        stackTrace: s,
+        additionalInfo: {
+          'idFluxo': widget.fluxo.id,
+          'ehReceita': widget.ehReceita,
+          'total': _total,
+        },
+      );
       if (!mounted) return;
       setState(() {
         _salvando = false;

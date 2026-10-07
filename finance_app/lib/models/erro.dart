@@ -1,3 +1,5 @@
+import '../services/api_config.dart';
+
 class Erro {
   final int idLog;
   final int idCliente;
@@ -14,6 +16,11 @@ class Erro {
   final int idUsuarioLocal;
   final int idComputadorLocal;
 
+  /// Qual produto gravou a linha. Tem default porque o api-master grava `null`
+  /// em silêncio quando o campo não vem, e um log sem `id_software` não aparece
+  /// filtrado por produto no painel do suporte.
+  final int idSoftware;
+
   Erro({
     required this.idLog,
     required this.idCliente,
@@ -29,6 +36,7 @@ class Erro {
     required this.origem,
     required this.idUsuarioLocal,
     required this.idComputadorLocal,
+    this.idSoftware = idSoftwareFinance,
   });
 
   Map<String, dynamic> toJson() {
@@ -47,6 +55,7 @@ class Erro {
       'origem': origem,
       'id_usuario_local': idUsuarioLocal,
       'id_computador_local': idComputadorLocal,
+      'id_software': idSoftware,
     };
   }
 
@@ -66,6 +75,7 @@ class Erro {
       origem: json['origem'] as int,
       idUsuarioLocal: json['id_usuario_local'] as int,
       idComputadorLocal: json['id_computador_local'] as int,
+      idSoftware: json['id_software'] as int? ?? idSoftwareFinance,
     );
   }
 }
