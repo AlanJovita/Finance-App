@@ -11,6 +11,7 @@ import '../utils/categoria_visuais.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/currency_input_formatter.dart';
 import '../utils/responsive_utils.dart';
+import '../utils/situacao_fluxo.dart';
 import 'categoria_form_dialog.dart';
 import 'seletor_categoria.dart';
 import 'subcategoria_form_dialog.dart';
@@ -189,13 +190,6 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     return null;
   }
 
-  int _gerarIdRef() {
-    final now = DateTime.now();
-    final idLoja = GlobalState().firstIdLoja;
-    return int.parse(
-      '$idLoja${now.day.toString().padLeft(2, '0')}${now.month.toString().padLeft(2, '0')}${now.year}${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}',
-    );
-  }
 
   /// Calcula a data de vencimento periódica considerando meses com dias diferentes
   DateTime _calcularDataVencimento(DateTime dataBase, int numeroParcela) {
@@ -331,7 +325,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
             await _apiService.createFluxo(fluxo);
           } else {
             // Parcelado
-            final idRef = _gerarIdRef();
+            final idRef = gerarIdRefParcelamento();
             final valorParcela =
                 _valorEhParcela ? valorBase : valorBase / _numeroParcelas;
 

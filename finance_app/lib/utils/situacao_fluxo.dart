@@ -13,6 +13,43 @@ import 'app_colors_extension.dart';
 /// Janela, em dias, que antecipa o aviso de vencimento.
 const int kDiasProximoVencimento = 5;
 
+/// Teto de `id_ref`: a coluna é um INT de 4 bytes no banco **e** `Int32` no DTO
+/// do PDV (`BLL/DTO/Finance/fluxo_caixa.vb`, no syscon_desktop).
+///
+/// Não dá para contornar alargando a coluna. `int(20)` no MySQL é a mesma coisa
+/// que `int(11)` — o número entre parênteses é largura de exibição, não de
+/// armazenamento — e trocar para BIGINT faria o sync do PDV estourar ao
+/// desserializar o valor em `Int32`.
+const int kIdRefMaximo = 2147483647;
+
+/// Época do [gerarIdRefParcelamento]. Recente de propósito — ver lá.
+final DateTime kEpocaIdRef = DateTime.utc(2020);
+
+/// Novo agrupador para um lote de parcelas, em segundos desde [kEpocaIdRef].
+///
+/// Vive aqui, ao lado de [TipoRecorrencia.de], que é quem lê o `id_ref`: as duas
+/// pontas do mesmo contrato num lugar só.
+///
+/// Antes disto o formulário montava o carimbo `{idLoja}ddMMyyyyHHmmss`, que dá 13
+/// a 14 dígitos (ex.: 7102026193122) — muito além de [kIdRefMaximo]. O INSERT era
+/// recusado pelo banco e **toda conta parcelada falhava** com "Falha ao executar
+/// o comando", sem que a mensagem real ("Out of range value for column 'id_ref'")
+/// chegasse à tela.
+///
+/// A época recente é o que dá folga: segundos desde 1970 só caberiam até 2038.
+/// Desde 2020, até 2088.
+///
+/// Granularidade de um segundo, igual à do esquema antigo. Duas lojas podem gerar
+/// o mesmo valor no mesmo segundo, e isso é inofensivo: toda consulta por
+/// `id_ref` é pareada com `id_cliente`.
+int gerarIdRefParcelamento([DateTime? agora]) {
+  final segundos = (agora ?? DateTime.now()).toUtc().difference(kEpocaIdRef).inSeconds;
+
+  // Piso em 1 para relógio da máquina atrasado para antes da época: `id_ref <= 0`
+  // faria a API apagar uma linha só em vez do grupo (ver `RemoveFluxoCaixa`).
+  return segundos > 0 ? segundos : 1;
+}
+
 /// Situação de um lançamento, na nomenclatura que aparece no card.
 enum SituacaoFluxo {
   confirmado('Confirmado'),
