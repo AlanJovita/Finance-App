@@ -33,16 +33,16 @@ abstract final class AppSpacing {
 
 abstract final class AppRadius {
   /// Ícones em caixa tonal, chips pequenos.
-  static const double sm = 8;
+  static const double sm = 4;
 
   /// Botões, campos de formulário, list tiles.
-  static const double md = 12;
+  static const double md = 6;
 
   /// Cards.
-  static const double lg = 16;
+  static const double lg = 8;
 
   /// Diálogos e chips.
-  static const double xl = 20;
+  static const double xl = 10;
 }
 
 /// Superfícies escuras precisam de mais elevação que as claras para se separarem

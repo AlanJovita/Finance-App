@@ -24,6 +24,7 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.serious,
     required this.error,
     required this.info,
+    required this.destaque,
     required this.paymentDinheiro,
     required this.paymentCredito,
     required this.paymentDebito,
@@ -52,6 +53,11 @@ class AppColors extends ThemeExtension<AppColors> {
 
   /// Informação neutra em destaque.
   final Color info;
+
+  /// Dourado de chamariz, para a ação que o app quer que seja notada antes das
+  /// outras. Fora da escala de status de propósito: não diz se algo está bem ou
+  /// mal, só puxa o olho.
+  final Color destaque;
 
   final Color paymentDinheiro;
   final Color paymentCredito;
@@ -96,6 +102,7 @@ class AppColors extends ThemeExtension<AppColors> {
     serious: Color(0xFFAF481C), // 4.51:1
     error: Color(0xFFC1322D), // 4.51:1
     info: Color(0xFF2D66C1), // 4.51:1
+    destaque: Color(0xFF8A6A00), // 4.52:1
     paymentDinheiro: Color(0xFF008300),
     paymentCredito: Color(0xFFE87BA4),
     paymentDebito: Color(0xFF2A78D6),
@@ -116,6 +123,7 @@ class AppColors extends ThemeExtension<AppColors> {
     serious: Color(0xFFE17344), // 4.51:1
     error: Color(0xFFDD726E), // 4.52:1
     info: Color(0xFF6592DB), // 4.52:1
+    destaque: Color(0xFFD9A520), // 7.84:1
     paymentDinheiro: Color(0xFF008300),
     paymentCredito: Color(0xFFD55181),
     paymentDebito: Color(0xFF3987E5),
@@ -136,6 +144,7 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? serious,
     Color? error,
     Color? info,
+    Color? destaque,
     Color? paymentDinheiro,
     Color? paymentCredito,
     Color? paymentDebito,
@@ -154,6 +163,7 @@ class AppColors extends ThemeExtension<AppColors> {
       serious: serious ?? this.serious,
       error: error ?? this.error,
       info: info ?? this.info,
+      destaque: destaque ?? this.destaque,
       paymentDinheiro: paymentDinheiro ?? this.paymentDinheiro,
       paymentCredito: paymentCredito ?? this.paymentCredito,
       paymentDebito: paymentDebito ?? this.paymentDebito,
@@ -177,6 +187,7 @@ class AppColors extends ThemeExtension<AppColors> {
       serious: Color.lerp(serious, other.serious, t)!,
       error: Color.lerp(error, other.error, t)!,
       info: Color.lerp(info, other.info, t)!,
+      destaque: Color.lerp(destaque, other.destaque, t)!,
       paymentDinheiro: Color.lerp(paymentDinheiro, other.paymentDinheiro, t)!,
       paymentCredito: Color.lerp(paymentCredito, other.paymentCredito, t)!,
       paymentDebito: Color.lerp(paymentDebito, other.paymentDebito, t)!,
@@ -204,6 +215,7 @@ class AppColors extends ThemeExtension<AppColors> {
         other.serious == serious &&
         other.error == error &&
         other.info == info &&
+        other.destaque == destaque &&
         other.paymentDinheiro == paymentDinheiro &&
         other.paymentCredito == paymentCredito &&
         other.paymentDebito == paymentDebito &&
@@ -224,6 +236,7 @@ class AppColors extends ThemeExtension<AppColors> {
     serious,
     error,
     info,
+    destaque,
     paymentDinheiro,
     paymentCredito,
     paymentDebito,

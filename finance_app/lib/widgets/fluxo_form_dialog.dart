@@ -17,7 +17,13 @@ import 'subcategoria_form_dialog.dart';
 class FluxoFormDialog extends StatefulWidget {
   final String tipoFluxo;
   final FluxoCaixa? fluxo;
-  final VoidCallback onSave;
+
+  /// Chamado depois de gravar, com a data de vencimento efetivamente salva.
+  ///
+  /// A lista precisa dela para seguir o lançamento: editar a data move a conta
+  /// de mês, e sem isso a tela continuaria no mês anterior — de onde o card
+  /// acabou de sair — parecendo que a alteração não foi aplicada.
+  final void Function(DateTime? vencimento) onSave;
 
   const FluxoFormDialog({
     super.key,
@@ -346,7 +352,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           }
         }
 
-        widget.onSave();
+        // No parcelamento a primeira parcela vence nesta data, então é também
+        // para este mês que a lista deve ir.
+        widget.onSave(_dataVencimento ?? DateTime.now());
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(
@@ -389,17 +397,17 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           (context) => CategoriaFormDialog(tipoFluxo: _tipoFluxoCategoria),
     );
 
-    if (novaCategoriaId != null) {
-      // Recarregar categorias
-      await _loadCategorias();
-      // Selecionar a categoria recém-criada
-      if (!mounted) return;
-      setState(() {
-        _categoriaId = novaCategoriaId;
-        _subcategoriaId = 0;
-        _habilitarSubcategorias = false;
-      });
-    }
+    // `null` é cancelamento; 0 significa criada sem id conhecido — nos dois
+    // casos diferente de selecionar, mas só o cancelamento dispensa recarregar.
+    if (novaCategoriaId == null) return;
+
+    await _loadCategorias();
+    if (!mounted) return;
+    setState(() {
+      if (novaCategoriaId != 0) _categoriaId = novaCategoriaId;
+      _subcategoriaId = 0;
+      _habilitarSubcategorias = false;
+    });
   }
 
   Future<void> _abrirDialogNovaSubcategoria(
@@ -416,11 +424,16 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           ),
     );
 
-    if (novaId != null) {
-      await _loadSubcategorias();
-      if (!mounted) return;
-      setState(() => _subcategoriaId = novaId);
-    }
+    // `null` é cancelamento; 0 significa criada sem id conhecido — nos dois
+    // casos diferente de selecionar, mas só o cancelamento dispensa recarregar.
+    if (novaId == null) return;
+
+    await _loadSubcategorias();
+    if (!mounted) return;
+    setState(() {
+      _habilitarSubcategorias = true;
+      if (novaId != 0) _subcategoriaId = novaId;
+    });
   }
 
   @override

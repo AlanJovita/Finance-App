@@ -90,6 +90,10 @@ class _FluxosPageState extends State<FluxosPage> {
 
   String _busca = '';
 
+  /// Só vale na barra compacta: no celular o campo de busca ocupa a linha
+  /// inteira e esconde o seletor de mês enquanto estiver aberto.
+  bool _buscaAberta = false;
+
   /// 0 é "todas as categorias". Reaproveita a convenção do resto do app, onde
   /// 0 já significa ausência de categoria.
   int _categoriaFiltro = 0;
@@ -104,6 +108,10 @@ class _FluxosPageState extends State<FluxosPage> {
   final Map<String, List<FluxoCaixa>> _itensPorMes = {};
   final Set<String> _carregando = {};
   final Map<String, Object> _erroPorMes = {};
+
+  /// Número do pedido mais recente de cada mês, para descartar respostas que
+  /// chegam fora de ordem. Ver [_carregarMes].
+  final Map<String, int> _geracao = {};
 
   /// Lançamentos sem vencimento. Vêm de uma consulta sem recorte de data, que é
   /// cara, então só é disparada quando o resumo mensal confirma que existem —
@@ -173,8 +181,13 @@ class _FluxosPageState extends State<FluxosPage> {
     }
   }
 
+  /// Recarregar um mês descartava o pedido quando já havia um em voo, e a
+  /// resposta antiga chegava depois repondo a lista anterior na tela — era isso
+  /// que fazia uma edição salva não aparecer. Agora cada pedido leva um número
+  /// e só o mais recente pode escrever no estado.
   Future<void> _carregarMes(String chave) async {
-    if (_carregando.contains(chave)) return;
+    final geracao = (_geracao[chave] ?? 0) + 1;
+    _geracao[chave] = geracao;
 
     setState(() {
       _carregando.add(chave);
@@ -195,13 +208,15 @@ class _FluxosPageState extends State<FluxosPage> {
         porPagina: 500,
       );
 
-      if (!mounted) return;
+      if (!mounted || _geracao[chave] != geracao) return;
       setState(() => _itensPorMes[chave] = pagina.itens);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || _geracao[chave] != geracao) return;
       setState(() => _erroPorMes[chave] = e);
     } finally {
-      if (mounted) setState(() => _carregando.remove(chave));
+      if (mounted && _geracao[chave] == geracao) {
+        setState(() => _carregando.remove(chave));
+      }
     }
   }
 
@@ -250,6 +265,24 @@ class _FluxosPageState extends State<FluxosPage> {
     } catch (e) {
       debugPrint('Erro ao carregar categorias: $e');
     }
+  }
+
+  /// Recarrega depois de gravar pelo formulário, acompanhando o lançamento.
+  ///
+  /// Mudar o vencimento muda o mês da conta. Sem seguir a data, a tela ficaria
+  /// no mês anterior — de onde o card acabou de sair — e a alteração pareceria
+  /// não ter sido aplicada.
+  void _recarregarApos(DateTime? vencimento) {
+    final origem = _chave(_mes);
+
+    if (vencimento != null &&
+        (vencimento.year != _mes.year || vencimento.month != _mes.month)) {
+      setState(() => _mes = DateTime(vencimento.year, vencimento.month));
+    }
+
+    // O mês de origem também sai do cache: a conta pode ter saído dele.
+    _itensPorMes.remove(origem);
+    _recarregar();
   }
 
   /// Recarrega o que está na tela depois de criar, editar, excluir ou dar baixa.
@@ -321,9 +354,23 @@ class _FluxosPageState extends State<FluxosPage> {
         return FluxoFormDialog(
           tipoFluxo: _tipo.tipoDialogo,
           fluxo: fluxo,
-          onSave: () {
-            _recarregar();
+          onSave: (vencimento) {
             Navigator.of(context).pop();
+            _recarregarApos(vencimento);
+            // O formulário fechava calado: sem confirmação, "não atualizou" e
+            // "não gravou" ficavam indistinguíveis para quem está olhando.
+            ScaffoldMessenger.of(this.context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  fluxo == null
+                      ? '${_tipo.singular[0].toUpperCase()}'
+                          '${_tipo.singular.substring(1)} criada.'
+                      : 'Alterações salvas.',
+                ),
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
+              ),
+            );
           },
         );
       },
@@ -447,26 +494,87 @@ class _FluxosPageState extends State<FluxosPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_tipo.titulo),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.insights),
-            onPressed: _abrirDetalhes,
-            tooltip: 'Detalhes do mês',
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showFormDialog(),
-            tooltip: 'Nova ${_tipo.singular}',
-          ),
-        ],
+        actions: [_buildBotaoDetalhes()],
       ),
       drawer: const AppDrawer(),
       body: Column(
         children: [
           _buildBarraFiltros(),
           Expanded(child: _buildLista()),
-          _buildResumoRodape(),
         ],
+      ),
+      // O resumo é barra do Scaffold, não o último filho do corpo: é o que faz
+      // o botão flutuante parar acima dele em vez de tapar os totais.
+      bottomNavigationBar: _buildResumoRodape(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showFormDialog(),
+        tooltip: 'Nova ${_tipo.singular}',
+        backgroundColor: _tipo.cor(context.appColors),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  /// Atalho para o resumo do mês, em dourado.
+  ///
+  /// É a única ação dourada do app: a cor não entra na escala de status, então
+  /// não compete com o verde de confirmado nem com o vermelho de atraso — ela
+  /// só puxa o olho para onde o panorama do mês está.
+  Widget _buildBotaoDetalhes() {
+    final theme = Theme.of(context);
+    final fundoBarra =
+        theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface;
+
+    // A barra é escura nos dois temas do app, então a variante que o olho vê
+    // aqui é sempre a de superfície escura. Puxar o dourado pelo modo do app
+    // misturaria o dourado escuro do tema claro com o azul da barra e o
+    // resultado lê como oliva apagado, não como destaque.
+    final paleta =
+        ThemeData.estimateBrightnessForColor(fundoBarra) == Brightness.dark
+            ? AppColors.dark
+            : AppColors.light;
+    final dourado = paleta.destaque;
+
+    // O ícone contrasta com o dourado já misturado ao fundo da barra, não com o
+    // dourado puro: é a cor composta que fica atrás dele.
+    final preenchimento = Color.alphaBlend(
+      dourado.withValues(alpha: 0.7),
+      fundoBarra,
+    );
+    final tinta =
+        ThemeData.estimateBrightnessForColor(preenchimento) == Brightness.dark
+            ? Colors.white
+            : Colors.black87;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm,
+      ),
+      child: Tooltip(
+        message: 'Detalhes do mês',
+        child: Material(
+          color: preenchimento,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: dourado, width: 1.5),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+          child: InkWell(
+            onTap: _abrirDetalhes,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              child: Icon(Icons.insights, size: 20, color: tinta),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -486,35 +594,56 @@ class _FluxosPageState extends State<FluxosPage> {
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.sm,
         ),
-        child:
-            estreito
-                ? Column(
-                  children: [
-                    _buildNavegadorMes(),
-                    const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      children: [
-                        Expanded(child: _buildBusca()),
-                        const SizedBox(width: AppSpacing.sm),
-                        _buildFiltroCategoria(apenasIcone: true),
-                      ],
-                    ),
-                  ],
-                )
-                : Row(
-                  children: [
-                    _buildNavegadorMes(),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(child: _buildBusca()),
-                    const SizedBox(width: AppSpacing.md),
-                    _buildFiltroCategoria(apenasIcone: false),
-                  ],
-                ),
+        child: estreito ? _buildBarraCompacta() : _buildBarraLarga(),
       ),
     );
   }
 
-  Widget _buildNavegadorMes() {
+  Widget _buildBarraLarga() {
+    return Row(
+      children: [
+        _buildNavegadorMes(),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(child: _buildBusca()),
+        const SizedBox(width: AppSpacing.md),
+        _buildFiltroCategoria(apenasIcone: false),
+      ],
+    );
+  }
+
+  /// No celular tudo cabe numa linha só: a lupa à esquerda do seletor de mês e
+  /// o filtro de categoria à direita. Tocar na lupa troca a linha inteira pelo
+  /// campo de busca — fechá-lo limpa o termo, para não restar filtro invisível.
+  Widget _buildBarraCompacta() {
+    if (_buscaAberta) {
+      return _buildBusca(autofocus: true, aoFechar: _fecharBusca);
+    }
+
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          tooltip: 'Buscar por descrição',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => setState(() => _buscaAberta = true),
+        ),
+        Expanded(
+          child: Center(child: _buildNavegadorMes(larguraRotulo: 132)),
+        ),
+        _buildFiltroCategoria(apenasIcone: true),
+      ],
+    );
+  }
+
+  void _fecharBusca() {
+    _buscaController.clear();
+    setState(() {
+      _busca = '';
+      _buscaAberta = false;
+    });
+  }
+
+  Widget _buildNavegadorMes({double larguraRotulo = 150}) {
     final theme = Theme.of(context);
     final agora = DateTime.now();
     final noMesAtual = _mes.year == agora.year && _mes.month == agora.month;
@@ -531,7 +660,7 @@ class _FluxosPageState extends State<FluxosPage> {
         // Largura fixa: sem ela o botão seguinte dança de lugar conforme o
         // nome do mês encolhe ou cresce.
         SizedBox(
-          width: 150,
+          width: larguraRotulo,
           child: _buildAtalhoMeses(theme, noMesAtual),
         ),
         IconButton(
@@ -631,9 +760,14 @@ class _FluxosPageState extends State<FluxosPage> {
     );
   }
 
-  Widget _buildBusca() {
+  Widget _buildBusca({bool autofocus = false, VoidCallback? aoFechar}) {
+    // Na barra compacta o X sempre aparece: ele é a única saída de volta para o
+    // seletor de mês, mesmo com o campo ainda vazio.
+    final mostraFechar = aoFechar != null || _busca.isNotEmpty;
+
     return TextField(
       controller: _buscaController,
+      autofocus: autofocus,
       decoration: InputDecoration(
         isDense: true,
         hintText: 'Buscar por descrição',
@@ -643,13 +777,17 @@ class _FluxosPageState extends State<FluxosPage> {
           minHeight: 36,
         ),
         suffixIcon:
-            _busca.isEmpty
+            !mostraFechar
                 ? null
                 : IconButton(
                   icon: const Icon(Icons.close, size: 16),
                   visualDensity: VisualDensity.compact,
-                  tooltip: 'Limpar busca',
+                  tooltip: aoFechar == null ? 'Limpar busca' : 'Fechar busca',
                   onPressed: () {
+                    if (aoFechar != null) {
+                      aoFechar();
+                      return;
+                    }
                     _buscaController.clear();
                     setState(() => _busca = '');
                   },

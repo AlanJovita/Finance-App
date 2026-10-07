@@ -271,6 +271,12 @@ class CardFluxo extends StatelessWidget {
                 onPressed: onBaixar,
                 style: FilledButton.styleFrom(
                   backgroundColor: corValor,
+                  // `FilledButton` não tem tema no app e cai no `StadiumBorder`
+                  // do Material: sem isto ele sairia em cápsula no meio de
+                  // cantos retos.
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.md,
                   ),

@@ -371,7 +371,8 @@ class ApiService {
   }
 
   /// Devolve o id gerado, para o seletor já deixar marcada a categoria que o
-  /// usuário acabou de criar. Null em falha.
+  /// usuário acabou de criar, ou `null` quando a API confirmou a criação sem
+  /// informar o id. Falha vira exceção com a mensagem da API.
   Future<int?> createCategoria(Categoria categoria) async {
     try {
       final response = await _handleRequest(
@@ -382,7 +383,9 @@ class ApiService {
         ),
         'createCategoria',
       );
-      if (response['success'] != true) return null;
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao criar categoria.');
+      }
       return _idCriado(response);
     } catch (e, stackTrace) {
       await _logger.logError(
@@ -391,7 +394,7 @@ class ApiService {
         stackTrace: stackTrace,
         additionalInfo: {'categoria': categoria.toJson()},
       );
-      return null;
+      rethrow;
     }
   }
 
@@ -434,7 +437,13 @@ class ApiService {
     }
   }
 
-  /// Devolve o id gerado. Null em falha.
+  /// Devolve o id gerado, ou `null` quando a API confirmou a criação sem
+  /// informar o id. Falha vira exceção com a mensagem da API.
+  ///
+  /// Antes qualquer problema virava `null` aqui, e a tela dizia "não foi
+  /// possível criar" tanto para a recusa de verdade quanto para o caso em que o
+  /// registro **foi** criado — levando o usuário a repetir e duplicar. Quem
+  /// chama distingue os dois: exceção é falha, `null` é criado sem id.
   Future<int?> createSubcategoria(Subcategoria subcategoria) async {
     try {
       final response = await _handleRequest(
@@ -445,7 +454,9 @@ class ApiService {
         ),
         'createSubcategoria',
       );
-      if (response['success'] != true) return null;
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao criar subcategoria.');
+      }
       return _idCriado(response);
     } catch (e, stackTrace) {
       await _logger.logError(
@@ -454,7 +465,7 @@ class ApiService {
         stackTrace: stackTrace,
         additionalInfo: {'subcategoria': subcategoria.toJson()},
       );
-      return null;
+      rethrow;
     }
   }
 

@@ -268,16 +268,19 @@ void main() {
     });
   }
 
-  for (final (nome, largura) in const [
-    ('desktop', 900.0),
-    ('estreito', 360.0),
+  // Um claro e um escuro: o botão dourado de detalhes calcula a tinta do ícone
+  // a partir do fundo da barra, e só os dois modos juntos mostram se a conta
+  // está certa nas duas pontas.
+  for (final (nome, largura, tema) in [
+    ('desktop', 900.0, AppTheme.lightTheme),
+    ('estreito', 360.0, AppTheme.darkTheme),
   ]) {
     testWidgets('tela de despesas — $nome', (tester) async {
       tester.view.physicalSize = Size(largura, 720);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(_pagina(AppTheme.darkTheme));
+      await tester.pumpWidget(_pagina(tema));
       await tester.pump(const Duration(seconds: 1));
 
       // As falhas de rede são capturadas pela própria tela; o que não pode
@@ -295,4 +298,31 @@ void main() {
       );
     });
   }
+
+  testWidgets('tela de despesas — busca aberta no celular', (tester) async {
+    tester.view.physicalSize = const Size(360, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_pagina(AppTheme.darkTheme));
+    await tester.pump(const Duration(seconds: 1));
+    tester.takeException();
+
+    // A lupa troca a barra inteira pelo campo de busca; o seletor de mês sai de
+    // cena enquanto ele estiver aberto.
+    await tester.tap(find.byIcon(Icons.search));
+    await tester.pumpAndSettle();
+
+    expect(
+      '${tester.takeException()}'.contains('overflow'),
+      isFalse,
+      reason: 'a barra de busca estourou',
+    );
+    expect(find.text('Outubro 2026'), findsNothing);
+
+    await expectLater(
+      find.byType(FluxosPage),
+      matchesGoldenFile('goldens/fluxos_tela_busca.png'),
+    );
+  });
 }

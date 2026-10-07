@@ -71,33 +71,61 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
         cor: _cor,
       );
 
-      final novoId = await _apiService.createCategoria(novaCategoria);
+      // Falha agora vem como exceção, com a mensagem da API. O que chega aqui
+      // foi criado: `null` só significa que o endpoint não devolveu o id.
+      final novoId =
+          await _apiService.createCategoria(novaCategoria) ??
+          await _idPelaDescricao(novaCategoria);
 
       if (!mounted) return;
 
-      if (novoId != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: AppSpacing.sm),
-                Expanded(child: Text('Categoria criada com sucesso!')),
-              ],
-            ),
-            backgroundColor: context.appColors.success,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 2),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text('Categoria criada com sucesso!')),
+            ],
           ),
-        );
-        Navigator.of(context).pop(novoId);
-      } else {
-        _showError('Não foi possível criar a categoria. Tente novamente.');
-      }
+          backgroundColor: context.appColors.success,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // 0 avisa quem abriu que a categoria existe mas não dá para
+      // pré-selecioná-la — diferente de fechar sem valor, que é cancelamento.
+      Navigator.of(context).pop(novoId ?? 0);
     } catch (e) {
       if (mounted) _showError(_mensagemDeErro(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// A API confirmou a criação sem devolver o id. Relê a lista e procura a
+  /// recém-criada pelo nome e pela natureza, ficando com o maior id entre as
+  /// que casam — a última inserida.
+  Future<int?> _idPelaDescricao(Categoria criada) async {
+    try {
+      final todas = await _apiService.listCategorias();
+      final alvo = criada.descricao.toLowerCase();
+
+      int? achado;
+      for (final c in todas) {
+        if (c.id != null &&
+            c.tipoFluxo == criada.tipoFluxo &&
+            c.descricao.trim().toLowerCase() == alvo &&
+            (achado == null || c.id! > achado)) {
+          achado = c.id;
+        }
+      }
+      return achado;
+    } catch (_) {
+      // Sem o id a categoria apenas não nasce selecionada; não é motivo para
+      // transformar uma criação bem-sucedida em erro.
+      return null;
     }
   }
 

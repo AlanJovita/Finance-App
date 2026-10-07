@@ -196,7 +196,12 @@ class _PagamentoDialogState extends State<PagamentoDialog> {
             )
             : FilledButton.icon(
               onPressed: _confirmar,
-              style: FilledButton.styleFrom(backgroundColor: cor),
+              style: FilledButton.styleFrom(
+                backgroundColor: cor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+              ),
               icon: const Icon(Icons.check, size: 18),
               label: Text('Confirmar $_substantivo'),
             ),
