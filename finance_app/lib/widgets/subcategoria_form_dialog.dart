@@ -189,6 +189,13 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
                   controller: _descricaoController,
                   autofocus: true,
                   textCapitalization: TextCapitalization.sentences,
+                  // Largura de `finance_subcategoria.descricao`. Sem o limite,
+                  // um nome mais longo só é recusado no servidor, e a mensagem
+                  // que chega é a genérica "Falha ao executar o comando".
+                  maxLength: 100,
+                  // O contador "0/100" não cabe no layout do dialog, e o limite
+                  // é alto o bastante para ninguém encostar nele por acidente.
+                  buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
                   decoration: const InputDecoration(
                     isDense: true,
                     labelText: 'Nome da Subcategoria',
