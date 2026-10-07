@@ -123,6 +123,11 @@ class _FluxosPageState extends State<FluxosPage> {
 
   TipoFluxo get _tipo => widget.tipo;
 
+  /// Lado do botão quadrado e altura dos controles da barra. O atalho de
+  /// detalhes, na AppBar, usa a mesma medida para cair na vertical do filtro de
+  /// categoria, que fica uma linha abaixo dele.
+  static const double _alturaControle = 40;
+
   static const List<String> _nomesMeses = [
     'Janeiro',
     'Fevereiro',
@@ -550,28 +555,28 @@ class _FluxosPageState extends State<FluxosPage> {
             ? Colors.white
             : Colors.black87;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.sm,
-      ),
-      child: Tooltip(
-        message: 'Detalhes do mês',
-        child: Material(
-          color: preenchimento,
-          shape: RoundedRectangleBorder(
-            side: BorderSide(color: dourado, width: 1.5),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-          ),
-          child: InkWell(
-            onTap: _abrirDetalhes,
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md,
-                vertical: AppSpacing.sm,
+    // Quadrado de 40 com a mesma margem direita da barra de filtros: assim ele
+    // cai exatamente na vertical do botão de categoria, que fica uma linha
+    // abaixo. Centralizado para não esticar na altura cheia da AppBar.
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(right: AppSpacing.lg),
+        child: Tooltip(
+          message: 'Detalhes do mês',
+          child: Material(
+            color: preenchimento,
+            shape: RoundedRectangleBorder(
+              side: BorderSide(color: dourado),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: InkWell(
+              onTap: _abrirDetalhes,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              child: SizedBox(
+                width: _alturaControle,
+                height: _alturaControle,
+                child: Icon(Icons.insights, size: 18, color: tinta),
               ),
-              child: Icon(Icons.insights, size: 20, color: tinta),
             ),
           ),
         ),
@@ -848,8 +853,8 @@ class _FluxosPageState extends State<FluxosPage> {
       onSelected: (id) => setState(() => _categoriaFiltro = id),
       itemBuilder: (context) => itens,
       child: Container(
-        height: 40,
-        width: apenasIcone ? 40 : 200,
+        height: _alturaControle,
+        width: apenasIcone ? _alturaControle : 200,
         padding: EdgeInsets.symmetric(
           horizontal: apenasIcone ? 0 : AppSpacing.md,
         ),

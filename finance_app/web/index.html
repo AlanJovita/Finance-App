@@ -35,6 +35,44 @@
 </head>
 
 <body>
+  <!--
+    Remove o service worker que as versões anteriores instalaram.
+
+    O service worker do Flutter serve os assets cache-first e sem revalidar, e
+    `flutter_bootstrap.js` é um deles: servido da cópia antiga, ele registrava de
+    volta a própria versão antiga do worker, fechando um ciclo em que nenhum
+    deploy chegava ao navegador. Foi assim que a fonte de ícones ficou presa duas
+    vezes, com os ícones novos saindo em branco.
+
+    O app depende da API para qualquer coisa, então não há o que fazer offline e
+    nada se perde desligando-o. Os assets passam a vir do servidor com
+    revalidação por ETag, que é o que o `nginx.conf` já configura.
+
+    Este bloco pode sair quando não houver mais navegador com o worker antigo
+    instalado — o `index.html` é o único recurso que o worker busca na rede
+    primeiro, e é por isso que esta limpeza consegue alcançar quem está preso.
+  -->
+  <script>
+    (async () => {
+      if (!('serviceWorker' in navigator)) return;
+      try {
+        const registros = await navigator.serviceWorker.getRegistrations();
+        if (registros.length === 0) return;
+
+        await Promise.all(registros.map((r) => r.unregister()));
+        const chaves = await caches.keys();
+        await Promise.all(
+          chaves.filter((k) => k.startsWith('flutter-')).map((k) => caches.delete(k)),
+        );
+
+        // Esta página já foi servida pelo worker antigo: sem recarregar, ela
+        // seguiria rodando com os arquivos que acabamos de descartar.
+        location.reload();
+      } catch (e) {
+        console.error('Falha ao remover o service worker antigo:', e);
+      }
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 

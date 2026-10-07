@@ -9,7 +9,10 @@ COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
 
 COPY . .
-RUN flutter build web --release --base-href /
+# Sem service worker: ele servia os assets cache-first e sem revalidar, o que
+# prendia o navegador na versão anterior a cada deploy (ver o comentário no
+# `web/index.html`). O cache agora é só o do HTTP, com revalidação por ETag.
+RUN flutter build web --release --base-href / --pwa-strategy=none
 
 # Estágio 2 — servidor estático
 FROM nginx:1.27-alpine
