@@ -221,6 +221,16 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     return _subcategoriasDaCategoria.any((s) => s.id == id) ? id : 0;
   }
 
+  /// `null` é "sem conta" — tanto o padrão quanto o caso em que a conta gravada
+  /// sumiu da lista. Quem desenha o chip usa isso para cair no ícone genérico.
+  Conta? get _contaSelecionada {
+    if (_contaId == 0) return null;
+    for (final c in _contas) {
+      if (c.id == _contaId) return c;
+    }
+    return null;
+  }
+
   Categoria? get _categoriaSelecionada {
     if (_categoriaId == null || _categoriaId == 0) return null;
     for (final cat in _categorias) {
@@ -512,9 +522,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     // Os campos não declaram estilo nem padding: o `inputDecorationTheme` do
     // tema já define borda, preenchimento e tipografia para o app inteiro.
     return AlertDialog(
-      title: Text(
-        '${widget.fluxo == null ? 'Nova' : 'Editar'} ${widget.tipoFluxo == 'receita' ? 'Receita' : 'Despesa'}',
-      ),
+      title: _buildCabecalho(),
       contentPadding: context.responsivePadding(),
       content: SizedBox(
         width: dialogWidth,
@@ -576,11 +584,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 ..._buildSubcategoria(),
                 const SizedBox(height: AppSpacing.md),
 
-                ..._buildConta(),
-
-                _buildDataVencimento(),
-                const SizedBox(height: AppSpacing.xs),
-
+                // Conta e vencimento ficam no cabeçalho: são as duas decisões
+                // que o lojista já traz pronta ao abrir o modal, e no corpo
+                // empurravam para baixo o que ele de fato vem preencher.
                 _buildRepeticao(),
                 const SizedBox(height: AppSpacing.md),
 
@@ -706,71 +712,195 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     ];
   }
 
-  /// Seletor de conta bancária — **só existe quando a loja tem conta**.
-  ///
-  /// Sem conta cadastrada não há escolha a fazer, e um campo fixo em "Sem conta"
-  /// só acrescentaria uma linha ao formulário. Quem nunca cadastrou conta vê o
-  /// modal exatamente como antes, e grava `id_conta = 0`.
-  List<Widget> _buildConta() {
-    if (_contas.isEmpty) return const [];
+  // ── Cabeçalho ──────────────────────────────────────────────────────────────
+  // Conta e vencimento moram aqui, não no corpo. Os dois já chegam decididos
+  // quando o modal abre — a conta tem padrão ("Sem conta") e a data é hoje —,
+  // então, como campo de formulário, ocupavam duas linhas inteiras empurrando
+  // para baixo justamente o que o lojista veio digitar. Em chip continuam a um
+  // toque, e o olho passa direto por eles quando os valores já servem.
 
-    return [
-      DropdownButtonFormField<int>(
-        value: _contaId,
-        isDense: true,
-        isExpanded: true,
-        decoration: const InputDecoration(
-          isDense: true,
-          labelText: 'Conta bancária',
+  /// Título mais os dois controles compactos.
+  ///
+  /// `Wrap` com `spaceBetween` resolve a responsividade sem medir a tela: cabendo
+  /// na linha, o título fica à esquerda e os chips à direita; não cabendo (o
+  /// diálogo no celular tem 90% da largura), os chips descem para a linha de
+  /// baixo inteiros, em vez de espremer o título ou estourar na horizontal.
+  Widget _buildCabecalho() {
+    final theme = Theme.of(context);
+
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: AppSpacing.md,
+      runSpacing: AppSpacing.sm,
+      children: [
+        Text(
+          '${widget.fluxo == null ? 'Nova' : 'Editar'} '
+          '${widget.tipoFluxo == 'receita' ? 'Receita' : 'Despesa'}',
+          style: theme.textTheme.titleLarge,
         ),
-        items: [
-          // Primeiro e padrão: lançar sem conta continua sendo o caminho normal,
-          // não uma exceção escondida no fim da lista.
-          const DropdownMenuItem(value: 0, child: Text('Sem conta')),
-          for (final c in _contas)
-            DropdownMenuItem(
-              value: c.id,
+        // `Row` e não outro `Wrap`: empilhar os dois chips um sobre o outro
+        // gastaria uma terceira linha de cabeçalho no celular. Aqui eles seguem
+        // lado a lado e quem cede é o nome da conta, que encolhe com reticências
+        // — por isso o `Flexible`.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Sem conta cadastrada não há escolha a fazer, e um chip fixo em
+            // "Sem conta" seria só ruído: quem nunca cadastrou conta vê o
+            // cabeçalho como antes, e grava `id_conta = 0`.
+            if (_contas.isNotEmpty) ...[
+              Flexible(child: _chipConta()),
+              const SizedBox(width: AppSpacing.sm),
+            ],
+            _chipData(),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _chipConta() {
+    final conta = _contaSelecionada;
+
+    return PopupMenuButton<int>(
+      tooltip: 'Conta bancária',
+      position: PopupMenuPosition.under,
+      initialValue: _contaId,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      onSelected: (v) => setState(() => _contaId = v),
+      itemBuilder:
+          (context) => [
+            // Primeiro e padrão: lançar sem conta continua sendo o caminho
+            // normal, não uma exceção escondida no fim da lista.
+            const PopupMenuItem(
+              value: 0,
               child: Row(
                 children: [
-                  LogoBanco(
-                    chave: c.imagem,
-                    nomeConta: c.descricao,
-                    diametro: 22,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      c.ativado ? c.descricao : '${c.descricao} (arquivada)',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  Icon(Icons.account_balance_wallet_outlined, size: 20),
+                  SizedBox(width: AppSpacing.sm),
+                  Text('Sem conta'),
                 ],
               ),
             ),
-        ],
-        onChanged: (v) => setState(() => _contaId = v ?? 0),
-      ),
-      const SizedBox(height: AppSpacing.sm),
-    ];
-  }
-
-  Widget _buildDataVencimento() {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      title: const Text('Data de Vencimento'),
-      subtitle: Text(
-        _dataVencimento != null
-            ? '${_dataVencimento!.day.toString().padLeft(2, '0')}/${_dataVencimento!.month.toString().padLeft(2, '0')}/${_dataVencimento!.year}'
-            : 'Selecione uma data',
-      ),
-      trailing: IconButton(
-        icon: const Icon(Icons.calendar_today, size: 20),
-        onPressed: _selecionarData,
+            for (final c in _contas)
+              PopupMenuItem(
+                value: c.id,
+                child: Row(
+                  children: [
+                    LogoBanco(
+                      chave: c.imagem,
+                      nomeConta: c.descricao,
+                      diametro: 20,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        c.ativado ? c.descricao : '${c.descricao} (arquivada)',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+      child: _chip(
+        icone:
+            conta == null
+                ? const Icon(Icons.account_balance_wallet_outlined, size: 16)
+                : LogoBanco(
+                  chave: conta.imagem,
+                  nomeConta: conta.descricao,
+                  diametro: 16,
+                ),
+        texto: conta?.descricao ?? 'Sem conta',
+        dica: 'Conta bancária',
       ),
     );
+  }
+
+  Widget _chipData() {
+    final data = _dataVencimento;
+
+    return InkWell(
+      onTap: _selecionarData,
+      borderRadius: BorderRadius.circular(AppRadius.xl),
+      child: _chip(
+        icone: const Icon(Icons.event, size: 16),
+        texto:
+            data == null
+                ? 'Sem data'
+                : '${data.day.toString().padLeft(2, '0')}/'
+                    '${data.month.toString().padLeft(2, '0')}/${data.year}',
+        dica: 'Data de vencimento',
+      ),
+    );
+  }
+
+  /// Forma comum dos dois chips do cabeçalho.
+  ///
+  /// O texto tem teto de largura e corta com reticências: nome de conta é livre,
+  /// e um "Conta corrente Banco do Brasil agência 1234" empurraria o título para
+  /// fora do diálogo.
+  ///
+  /// Nenhum dos dois leva chevron. Não é só estética: no celular o diálogo tem
+  /// 280 lógicos de largura (o `insetPadding` do `AlertDialog` come 40 de cada
+  /// lado, independente da largura que o conteúdo pede), sobrando ~232 para o
+  /// cabeçalho — e os 18px da seta eram a diferença entre "Sem conta" inteiro e
+  /// "Sem con…". A pílula com borda já lê como controle.
+  Widget _chip({
+    required Widget icone,
+    required String texto,
+    String? dica,
+  }) {
+    final theme = Theme.of(context);
+
+    final conteudo = Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        // Preenchimento e borda dos campos de texto, não `surfaceContainerHighest`:
+        // no tema escuro essa última é a cor do próprio card do diálogo
+        // (`darkCardBg`), e o chip desaparecia no fundo. Usar o par do input faz
+        // os dois controles lerem como os campos logo abaixo.
+        color: theme.inputDecorationTheme.fillColor,
+        border: Border.all(color: theme.colorScheme.outline),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          icone,
+          const SizedBox(width: AppSpacing.xs),
+          // `Flexible` para o chip caber onde o pai apertar (celular), e
+          // `ConstrainedBox` para ele não esticar onde há espaço de sobra.
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                texto,
+                // `labelMedium` e não `labelLarge`: com o corpo maior, os dois
+                // chips somados não cabiam na largura de um celular (360 lógicos
+                // dão ~276 úteis no cabeçalho) e "Sem conta" truncava em "Sem…".
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return dica == null ? conteudo : Tooltip(message: dica, child: conteudo);
   }
 
   Widget _buildRepeticao() {

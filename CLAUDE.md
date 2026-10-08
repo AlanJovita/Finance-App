@@ -13,7 +13,7 @@ cd finance_app
 flutter pub get                # install dependencies
 flutter run                    # run the app (android/ios/web/windows/linux/macos targets exist)
 flutter analyze                # lint (flutter_lints; deprecated_member_use is ignored)
-flutter test                   # run all tests
+flutter test                   # run all tests (see note below — test/ is not in the repo)
 flutter test test/widget_test.dart   # run a single test file
 
 # Regenerate json_serializable models (*.g.dart) after editing files in lib/models/
@@ -22,6 +22,8 @@ dart run build_runner build --delete-conflicting-outputs
 # Regenerate app icons after changing assets/images/logo.png
 dart run flutter_launcher_icons
 ```
+
+**`finance_app/test/` is not in the repository.** It is ignored by `finance_app/.gitignore`, by project decision: the suite lives on the developer's machine. That includes `test/goldens/` (the reference images, useless without the tests) and `test/failures/` (artifacts Flutter rewrites on every failing golden run — 40 PNGs that were committed by accident). `flutter test` works normally wherever the folder exists; a fresh clone has no `test/`, and the way back is the history (`git log --diff-filter=D -- finance_app/test/`). References to specific test files elsewhere in this document are still accurate — only their location changed. `ios/RunnerTests/` and `macos/RunnerTests/` stay tracked: they are Flutter platform scaffolding wired into the Xcode projects.
 
 ## Architecture
 
@@ -42,7 +44,7 @@ The finance-api sends to the same place, via `Util/log_api.py` there. Deserializ
 
 **Conta bancária** (`lib/pages/contas_page.dart`): three things there are not inferable from the code.
 
-`id_conta = 0` is "sem conta" and is the default for every lançamento — including everything the PDV and the api-master write, since neither knows the column. The selector in `FluxoFormDialog` therefore only appears when the store has an account, and `toJson` always sends an explicit `id_conta`: on the API side an *absent* key means "don't touch the account" (that is what keeps the PDV sync from wiping it), so omitting 0 would make "Sem conta" fail to detach an account during an edit.
+`id_conta = 0` is "sem conta" and is the default for every lançamento — including everything the PDV and the api-master write, since neither knows the column. The selector in `FluxoFormDialog` therefore only appears when the store has an account, and `toJson` always sends an explicit `id_conta`: on the API side an *absent* key means "don't touch the account" (that is what keeps the PDV sync from wiping it), so omitting 0 would make "Sem conta" fail to detach an account during an edit. **`id_subcategoria` now follows the same rule** — the app must keep sending it explicitly, including 0, or clearing a subcategoria stops working. Both are locked by `models_api_contract_test.dart`.
 
 The account list is read from `ContasCache`, loaded once per session, **not** from `ApiService` directly. The lançamento modal already fires two requests per opening (categorias + subcategorias); the account list changes far less and a third request per opening buys nothing. `AuthProvider.logout` clears the cache — it is a per-store list. The cache deliberately does not store failures, and `ContaFormDialog`/`ContasPage` invalidate it after every write. One subtlety in `_loadContas`: an **archived** account stays in the dropdown when it is the one this lançamento already uses, otherwise editing an old entry would silently drop its account on save.
 

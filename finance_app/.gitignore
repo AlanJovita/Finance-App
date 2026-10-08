@@ -43,3 +43,22 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Suíte de testes — local, fora do versionamento por decisão do projeto.
+#
+# Ancorado em `/test/` para pegar só a pasta de testes do app, e não qualquer
+# diretório chamado `test` que apareça dentro de outra coisa.
+#
+# Inclui `test/goldens/` (as imagens de referência, que sem os testes não servem
+# para nada) e `test/failures/` (os artefatos que o Flutter grava quando um
+# golden falha — estes nunca deveriam ter sido versionados: eram 40 PNGs
+# reescritos a cada execução).
+#
+# Os arquivos continuam no disco; `flutter test` segue funcionando aqui. O que
+# saiu é o upload. Um clone novo não traz a suíte — para recuperá-la, o histórico
+# ainda tem tudo (`git log --diff-filter=D -- finance_app/test/`).
+#
+# `ios/RunnerTests/` e `macos/RunnerTests/` NÃO entram: são andaimes do Flutter
+# referenciados pelos projetos do Xcode, e removê-los quebra o build de quem
+# clonar.
+/test/

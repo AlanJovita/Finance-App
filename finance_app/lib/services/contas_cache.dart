@@ -68,6 +68,15 @@ class ContasCache {
   /// da primeira resposta.
   bool get carregado => _contas != null;
 
+  /// Preenche o cache com uma lista já em mãos, sem ir à rede.
+  ///
+  /// A página de Contas chama isto depois de carregar os saldos: a resposta de
+  /// `/conta/saldos` já traz todos os campos de uma [Conta] (id, descrição,
+  /// ativado, imagem, saldo inicial), então buscar a mesma lista de novo em
+  /// `/conta/list` na abertura do próximo lançamento seria uma requisição para
+  /// obter o que já está na memória.
+  void semear(List<Conta> contas) => _contas = contas;
+
   /// Marca o cache como sujo. Chamado pela página de Contas depois de criar,
   /// editar ou apagar — a próxima leitura busca de novo.
   void invalidar() => _contas = null;

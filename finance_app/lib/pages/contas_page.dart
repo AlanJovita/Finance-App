@@ -78,8 +78,26 @@ class _ContasPageState extends State<ContasPage> {
 
       if (!mounted || geracao != _geracao) return;
 
+      final saldos = resultado[0] as List<SaldoConta>;
+
+      // A resposta de saldos já traz todos os campos de uma `Conta`. Semear o
+      // cache aqui poupa a requisição de `/conta/list` que o próximo modal de
+      // lançamento faria para obter exatamente esta lista.
+      ContasCache().semear([
+        for (final s in saldos)
+          if (!s.semConta)
+            Conta(
+              id: s.id,
+              idCliente: GlobalState().firstIdLoja,
+              descricao: s.descricao,
+              ativado: s.ativado,
+              imagem: s.imagem,
+              saldoInicial: s.saldoInicial,
+            ),
+      ]);
+
       setState(() {
-        _saldos = resultado[0] as List<SaldoConta>;
+        _saldos = saldos;
         _transferencias = resultado[1] as List<Transferencia>;
         _carregando = false;
       });
