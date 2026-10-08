@@ -59,6 +59,15 @@ class FluxoCaixa {
   @JsonKey(name: 'id_ref')
   final int? idRef;
 
+  /// Conta bancária do lançamento; 0 é "sem conta", que é o padrão.
+  ///
+  /// `null` só aparece em objeto montado na mão sem o campo. No `toJson` isso é
+  /// diferente de 0 e a API trata assim: chave ausente significa "não mexe na
+  /// conta" no `PUT` (o PDV sincroniza sem o campo), enquanto 0 é o usuário
+  /// escolhendo "sem conta". O formulário sempre manda um valor.
+  @JsonKey(name: 'id_conta')
+  final int? idConta;
+
   FluxoCaixa({
     this.id,
     this.idLoja,
@@ -74,6 +83,7 @@ class FluxoCaixa {
     this.diaVencimento,
     this.repeticao,
     this.idRef,
+    this.idConta,
   });
 
   factory FluxoCaixa.fromJson(Map<String, dynamic> json) {
@@ -93,6 +103,7 @@ class FluxoCaixa {
         diaVencimento: _safeCast<int>(json['dia_vencimento']),
         repeticao: _safeString(json['repeticao']),
         idRef: _safeCast<int>(json['id_ref']),
+        idConta: _safeCast<int>(json['id_conta']),
       );
     } catch (e) {
       // `print`, e não o LoggerService: `fromJson` roda uma vez por item da
@@ -157,6 +168,7 @@ class FluxoCaixa {
     int? diaVencimento,
     String? repeticao,
     int? idRef,
+    int? idConta,
   }) {
     return FluxoCaixa(
       id: id ?? this.id,
@@ -173,6 +185,7 @@ class FluxoCaixa {
       diaVencimento: diaVencimento ?? this.diaVencimento,
       repeticao: repeticao ?? this.repeticao,
       idRef: idRef ?? this.idRef,
+      idConta: idConta ?? this.idConta,
     );
   }
 

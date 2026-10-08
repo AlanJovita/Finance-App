@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/fluxo_caixa.dart';
 import '../models/categoria.dart';
+import '../models/conta.dart';
 import '../models/subcategoria.dart';
 import '../models/caixa.dart';
 import '../models/relatorio_mensal.dart';
@@ -464,6 +465,279 @@ class ApiService {
         e,
         stackTrace: stackTrace,
         additionalInfo: {'subcategoria': subcategoria.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  // Endpoints de Conta bancária
+  /// Contas da loja, ativas primeiro.
+  ///
+  /// Quem chama isto é o [ContasCache], uma vez por sessão: o seletor do modal de
+  /// lançamento precisa da lista a cada abertura, e consultar de novo a cada vez
+  /// acrescentaria uma terceira requisição a um modal que já faz duas.
+  Future<List<Conta>> listContas() async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/finance/conta/list/$idLoja')),
+        'listContas',
+      );
+
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => Conta.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao listar contas.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listContas',
+        e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Saldo atual e previsto de cada conta, acumulados até [ate].
+  ///
+  /// [ate] é o último dia do mês escolhido na tela. Os saldos somam desde o
+  /// começo até essa data — a página mostra saldo de conta, não resultado do mês.
+  ///
+  /// A lista pode trazer uma entrada com `id == 0` ("Sem conta"), que é onde mora
+  /// tudo que foi lançado antes de existir conta cadastrada.
+  Future<List<SaldoConta>> getSaldosContas({DateTime? ate}) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{};
+    if (ate != null) params['ate'] = _data(ate);
+
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/finance/conta/saldos/$idLoja',
+      ).replace(queryParameters: params.isEmpty ? null : params);
+
+      final response = await _handleRequest(
+        () => http.get(uri),
+        'getSaldosContas',
+      );
+
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => SaldoConta.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao carregar os saldos.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getSaldosContas',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: params,
+      );
+      rethrow;
+    }
+  }
+
+  /// Transferências do período, já pareadas pelo servidor — uma linha por
+  /// transferência, não duas.
+  ///
+  /// As pernas ficam fora das listas de Receitas e Despesas, porque transferência
+  /// entre contas da própria loja não é receita nem despesa; é por aqui que elas
+  /// aparecem.
+  Future<List<Transferencia>> listTransferencias({
+    DateTime? de,
+    DateTime? ate,
+  }) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{};
+    if (de != null) params['de'] = _data(de);
+    if (ate != null) params['ate'] = _data(ate);
+
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/finance/conta/transferencias/$idLoja',
+      ).replace(queryParameters: params.isEmpty ? null : params);
+
+      final response = await _handleRequest(
+        () => http.get(uri),
+        'listTransferencias',
+      );
+
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => Transferencia.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao listar transferências.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listTransferencias',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: params,
+      );
+      rethrow;
+    }
+  }
+
+  /// Devolve o id gerado, ou `null` quando a API confirmou a criação sem
+  /// informar o id. Falha vira exceção com a mensagem da API — a mesma distinção
+  /// de [createSubcategoria], pelo mesmo motivo: tratar os dois como erro levaria
+  /// o usuário a repetir e duplicar a conta.
+  Future<int?> createConta(Conta conta) async {
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/conta'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(conta.toJson()),
+        ),
+        'createConta',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao criar a conta.');
+      }
+      return _idCriado(response);
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.createConta',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'conta': conta.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> updateConta(Conta conta) async {
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/conta'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(conta.toJson()),
+        ),
+        'updateConta',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao salvar a conta.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateConta',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'conta': conta.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga a conta realocando as movimentações dela.
+  ///
+  /// [moverPara] 0 manda as movimentações para "sem conta", que é também o caminho
+  /// quando a loja não tem outra conta cadastrada. Conta e movimentações são
+  /// tratadas numa transação só do lado do servidor.
+  Future<void> deleteConta(int id, {int moverPara = 0}) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final uri = Uri.parse(
+        '$_baseUrl/finance/conta/$id/$idLoja',
+      ).replace(queryParameters: {'mover_para': '$moverPara'});
+
+      final response = await _handleRequest(
+        () => http.delete(uri),
+        'deleteConta',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao apagar a conta.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteConta',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id, 'moverPara': moverPara},
+      );
+      rethrow;
+    }
+  }
+
+  /// Move dinheiro entre duas contas: **uma** chamada cria as duas pernas.
+  ///
+  /// A despesa na origem e a receita no destino são gravadas sob transação única
+  /// no servidor. Dois POST daqui no lugar disto poderiam deixar a origem
+  /// debitada sem o crédito no destino — e os dois saldos errados, sem nada
+  /// apontando o problema.
+  Future<void> transferir({
+    required int idOrigem,
+    required int idDestino,
+    required double valor,
+    DateTime? data,
+    String? observacao,
+  }) async {
+    final corpo = <String, dynamic>{
+      'id_cliente': GlobalState().firstIdLoja,
+      'id_origem': idOrigem,
+      'id_destino': idDestino,
+      'valor': valor,
+      if (data != null) 'data': _data(data),
+      if (observacao != null && observacao.trim().isNotEmpty)
+        'observacao': observacao.trim(),
+    };
+
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/conta/transferencia'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(corpo),
+        ),
+        'transferir',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao transferir.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.transferir',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: corpo,
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga as duas pernas de uma transferência de uma vez.
+  ///
+  /// Não dá para usar [deleteFluxo] aqui: ele agrupa por `id_ref`, que numa
+  /// transferência é 0 — apagaria um lado só e deixaria as duas contas com saldo
+  /// errado.
+  Future<void> deleteTransferencia(int idTransferencia) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.delete(
+          Uri.parse(
+            '$_baseUrl/finance/conta/transferencia/$idTransferencia/$idLoja',
+          ),
+        ),
+        'deleteTransferencia',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao apagar a transferência.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteTransferencia',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idTransferencia': idTransferencia},
       );
       rethrow;
     }

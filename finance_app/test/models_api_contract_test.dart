@@ -1,10 +1,13 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:finance_app/models/boleto.dart';
 import 'package:finance_app/models/caixa.dart';
 import 'package:finance_app/models/categoria.dart';
+import 'package:finance_app/models/conta.dart';
 import 'package:finance_app/models/fluxo_caixa.dart';
 import 'package:finance_app/models/resumo_fluxo.dart';
 import 'package:finance_app/models/subcategoria.dart';
+import 'package:finance_app/utils/bancos.dart';
 
 /// Valida o parse dos modelos contra o formato real retornado pela API
 /// (finance-api.premiosistemas.com.br), capturado em testes manuais.
@@ -170,6 +173,159 @@ void main() {
 
       expect(fluxo.dataCriacao, isNull);
       expect(fluxo.dataVencimento, isNull);
+    });
+
+    test('lê id_conta; API sem a coluna ainda devolve 0', () {
+      expect(
+        FluxoCaixa.fromJson({'id': 7, 'id_cliente': 42, 'id_conta': 3}).idConta,
+        3,
+      );
+      // Banco antes da migração: a API devolve 0, não null.
+      expect(
+        FluxoCaixa.fromJson({'id': 7, 'id_cliente': 42, 'id_conta': 0}).idConta,
+        0,
+      );
+    });
+
+    test('toJson manda id_conta — é por ele que o PUT altera a conta', () {
+      // Chave ausente significa "não mexe na conta" do lado da API (o PDV
+      // sincroniza sem o campo). O formulário sempre manda um valor, então 0
+      // tem de sair explícito, senão escolher "Sem conta" numa edição não
+      // desvincularia a conta anterior.
+      expect(FluxoCaixa(id: 1, idLoja: 42, idConta: 0).toJson()['id_conta'], 0);
+      expect(FluxoCaixa(id: 1, idLoja: 42, idConta: 5).toJson()['id_conta'], 5);
+    });
+  });
+
+  group('Conta bancária', () {
+    test('parseia GET /conta/list (imagem é a chave do catálogo)', () {
+      final conta = Conta.fromJson({
+        'id': 3,
+        'id_cliente': 99999,
+        'descricao': 'Caixa Econômica',
+        'ativado': true,
+        'imagem': '104',
+        'saldo_inicial': 1500.50,
+      });
+
+      expect(conta.id, 3);
+      expect(conta.idCliente, 99999);
+      expect(conta.descricao, 'Caixa Econômica');
+      expect(conta.ativado, isTrue);
+      expect(conta.imagem, '104');
+      expect(conta.saldoInicial, 1500.50);
+    });
+
+    test('tolera DECIMAL como string e campos ausentes', () {
+      final conta = Conta.fromJson({
+        'id': 4,
+        'id_cliente': 1,
+        'descricao': 'Carteira',
+        'saldo_inicial': '87.30',
+      });
+
+      expect(conta.saldoInicial, 87.30);
+      // Sem imagem é '' e não null: o catálogo trata vazio como "sem
+      // instituição", e null exigiria checagem em todo ponto de uso.
+      expect(conta.imagem, '');
+      expect(conta.ativado, isTrue);
+    });
+
+    test('SaldoConta separa o balde "sem conta" das contas de verdade', () {
+      final semConta = SaldoConta.fromJson({
+        'id': 0,
+        'descricao': 'Sem conta',
+        'ativado': true,
+        'imagem': '',
+        'saldo_inicial': 0.0,
+        'saldo_atual': 300.0,
+        'saldo_previsto': 500.0,
+        'quantidade': 7,
+      });
+
+      expect(semConta.semConta, isTrue);
+      // O que falta confirmar é a diferença entre previsto e atual.
+      expect(semConta.aConfirmar, 200.0);
+
+      expect(
+        SaldoConta.fromJson({
+          'id': 2,
+          'descricao': 'Nubank',
+          'ativado': false,
+          'imagem': '260',
+          'saldo_inicial': 100.0,
+          'saldo_atual': 100.0,
+          'saldo_previsto': 100.0,
+          'quantidade': 0,
+        }).semConta,
+        isFalse,
+      );
+    });
+
+    test('Transferencia parseia o par já montado pela API', () {
+      final t = Transferencia.fromJson({
+        'id_transferencia': 215000000,
+        'id_conta_origem': 1,
+        'id_conta_destino': 2,
+        'valor': '1000.00',
+        // `GenericResult._convert_for_json` serializa date como ISO 8601.
+        'data': '2026-10-08',
+        'descricao': 'Transferência para Nubank',
+      });
+
+      expect(t.idTransferencia, 215000000);
+      expect(t.idContaOrigem, 1);
+      expect(t.idContaDestino, 2);
+      expect(t.valor, 1000.0);
+      expect(t.data, DateTime(2026, 10, 8));
+    });
+  });
+
+  group('Catálogo de bancos', () {
+    test('resolve nome, cor e asset pela chave COMPE', () {
+      expect(Bancos.nome('104'), 'Caixa Econômica Federal');
+      expect(Bancos.asset('104'), 'assets/images/bancos/104.png');
+      expect(Bancos.cor('104'), isNot(Bancos.cor(null)));
+    });
+
+    test('chave desconhecida ou vazia cai no genérico, sem estourar', () {
+      // O catálogo pode encolher entre versões do app; a chave gravada no banco
+      // continua lá.
+      expect(Bancos.nome('999'), '');
+      expect(Bancos.asset('999'), isNull);
+      expect(Bancos.icone('999'), Bancos.iconeGenerico);
+      expect(Bancos.asset(''), isNull);
+      expect(Bancos.asset(null), isNull);
+    });
+
+    test('entrada que não é banco não tem asset', () {
+      // Carteira e cofre usam ícone; tentar carregar imagem só produziria o
+      // errorBuilder a cada desenho.
+      expect(Bancos.asset('carteira'), isNull);
+      expect(Bancos.de('carteira')!.temLogo, isFalse);
+    });
+
+    test('busca casa nome, termo sem acento e número do banco', () {
+      expect(Bancos.buscar('104'), contains('104'));
+      expect(Bancos.buscar('caixa economica'), contains('104'));
+      expect(Bancos.buscar('ITAU'), contains('341'));
+      expect(Bancos.buscar('nubank'), contains('260'));
+      expect(Bancos.buscar('xyzw'), isEmpty);
+      // Busca vazia devolve tudo, com os sugeridos à frente.
+      expect(Bancos.buscar('').first, Bancos.sugeridos.first);
+    });
+
+    test('texto sobre a marca acompanha a luminância do fundo', () {
+      // Branco sobre o amarelo do Banco do Brasil é ilegível; preto sobre o
+      // preto do C6 também. Por isso cada marca pode manter a cor real.
+      expect(Bancos.corDoTexto(Bancos.cor('001')), Colors.black87);
+      expect(Bancos.corDoTexto(Bancos.cor('336')), Colors.white);
+    });
+
+    test('iniciais saem do nome que o lojista deu à conta', () {
+      expect(Bancos.iniciais('Caixa Econômica'), 'CE');
+      expect(Bancos.iniciais('Nubank'), 'NU');
+      expect(Bancos.iniciais('  '), '?');
     });
   });
 

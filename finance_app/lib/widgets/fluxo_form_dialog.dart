@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/categoria.dart';
+import '../models/conta.dart';
 import '../models/fluxo_caixa.dart';
 import '../models/subcategoria.dart';
 import '../services/api_service.dart';
+import '../services/contas_cache.dart';
 import '../services/logger_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
@@ -13,6 +15,7 @@ import '../utils/currency_input_formatter.dart';
 import '../utils/responsive_utils.dart';
 import '../utils/situacao_fluxo.dart';
 import 'categoria_form_dialog.dart';
+import 'logo_banco.dart';
 import 'seletor_categoria.dart';
 import 'subcategoria_form_dialog.dart';
 
@@ -54,6 +57,13 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   List<Categoria> _categorias = [];
   List<Subcategoria> _subcategorias = [];
 
+  /// Conta bancária do lançamento; 0 é "sem conta", o padrão.
+  int _contaId = 0;
+
+  /// O que o seletor oferece. Vazio significa "a loja não tem conta cadastrada"
+  /// — e então o seletor inteiro não aparece, porque não há escolha a fazer.
+  List<Conta> _contas = const [];
+
   /// Só aparece quando a categoria escolhida ainda não tem nenhuma filha — é o
   /// atalho para criar a primeira. Com subcategorias já cadastradas, o card
   /// aparece direto e o checkbox some.
@@ -79,11 +89,13 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       _dataVencimento = widget.fluxo!.dataVencimento ?? DateTime.now();
       _confirmado = widget.fluxo!.confirmado ?? false;
       _repeticao = widget.fluxo!.repeticao ?? '1';
+      _contaId = widget.fluxo!.idConta ?? 0;
     }
 
     // Carregar categorias após definir os valores iniciais
     _loadCategorias();
     _loadSubcategorias();
+    _loadContas();
   }
 
   @override
@@ -163,6 +175,33 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         stackTrace: s,
       );
     }
+  }
+
+  /// Contas que o seletor oferece.
+  ///
+  /// Vem do [ContasCache], carregado uma vez por sessão: este modal já consulta
+  /// categorias e subcategorias a cada abertura, e a lista de contas muda muito
+  /// menos que isso — pedi-la de novo aqui seria uma terceira requisição por
+  /// abertura, para um dado praticamente fixo.
+  ///
+  /// Arquivada não entra, **exceto** a que este lançamento já usa: ela é omitida
+  /// de lançamentos novos, mas tirá-la da lista durante uma edição faria o
+  /// `Dropdown` cair em "sem conta" e a gravação desvincular a conta em silêncio.
+  Future<void> _loadContas() async {
+    final contas = await ContasCache().obter();
+    if (!mounted) return;
+
+    setState(() {
+      _contas = [
+        for (final c in contas)
+          if (c.ativado || c.id == _contaId) c,
+      ];
+
+      // A conta gravada pode ter sido apagada entre a listagem e esta abertura.
+      if (_contaId != 0 && !_contas.any((c) => c.id == _contaId)) {
+        _contaId = 0;
+      }
+    });
   }
 
   /// Filhas da categoria em foco. Sem categoria escolhida não há pai ao qual
@@ -300,6 +339,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
             diaVencimento: (_dataVencimento ?? DateTime.now()).day,
             repeticao: _repeticao,
             idRef: widget.fluxo!.idRef,
+            idConta: _contaId,
           );
           await _apiService.updateFluxo(fluxo);
         } else {
@@ -321,6 +361,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
               diaVencimento: (_dataVencimento ?? DateTime.now()).day,
               repeticao: _repeticao,
               idRef: 0,
+              idConta: _contaId,
             );
             await _apiService.createFluxo(fluxo);
           } else {
@@ -355,6 +396,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 diaVencimento: dataVencimentoParcela.day,
                 repeticao: _repeticao,
                 idRef: idRef,
+                idConta: _contaId,
               );
               await _apiService.createFluxo(fluxo);
             }
@@ -534,6 +576,8 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 ..._buildSubcategoria(),
                 const SizedBox(height: AppSpacing.md),
 
+                ..._buildConta(),
+
                 _buildDataVencimento(),
                 const SizedBox(height: AppSpacing.xs),
 
@@ -659,6 +703,55 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           rotuloNenhum: 'Sem subcategoria',
         ),
       ],
+    ];
+  }
+
+  /// Seletor de conta bancária — **só existe quando a loja tem conta**.
+  ///
+  /// Sem conta cadastrada não há escolha a fazer, e um campo fixo em "Sem conta"
+  /// só acrescentaria uma linha ao formulário. Quem nunca cadastrou conta vê o
+  /// modal exatamente como antes, e grava `id_conta = 0`.
+  List<Widget> _buildConta() {
+    if (_contas.isEmpty) return const [];
+
+    return [
+      DropdownButtonFormField<int>(
+        value: _contaId,
+        isDense: true,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          isDense: true,
+          labelText: 'Conta bancária',
+        ),
+        items: [
+          // Primeiro e padrão: lançar sem conta continua sendo o caminho normal,
+          // não uma exceção escondida no fim da lista.
+          const DropdownMenuItem(value: 0, child: Text('Sem conta')),
+          for (final c in _contas)
+            DropdownMenuItem(
+              value: c.id,
+              child: Row(
+                children: [
+                  LogoBanco(
+                    chave: c.imagem,
+                    nomeConta: c.descricao,
+                    diametro: 22,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      c.ativado ? c.descricao : '${c.descricao} (arquivada)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        onChanged: (v) => setState(() => _contaId = v ?? 0),
+      ),
+      const SizedBox(height: AppSpacing.sm),
     ];
   }
 

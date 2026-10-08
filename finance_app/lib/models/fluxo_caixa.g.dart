@@ -27,6 +27,7 @@ FluxoCaixa _$FluxoCaixaFromJson(Map<String, dynamic> json) => FluxoCaixa(
   diaVencimento: (json['dia_vencimento'] as num?)?.toInt(),
   repeticao: json['repeticao'] as String?,
   idRef: (json['id_ref'] as num?)?.toInt(),
+  idConta: (json['id_conta'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$FluxoCaixaToJson(FluxoCaixa instance) =>
@@ -45,4 +46,5 @@ Map<String, dynamic> _$FluxoCaixaToJson(FluxoCaixa instance) =>
       'dia_vencimento': instance.diaVencimento,
       'repeticao': instance.repeticao,
       'id_ref': instance.idRef,
+      'id_conta': instance.idConta,
     };

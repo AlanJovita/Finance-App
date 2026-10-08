@@ -11,6 +11,7 @@ import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/categoria_visuais.dart';
 import '../utils/currency_formatter.dart';
+import '../utils/meses.dart';
 import '../utils/responsive_utils.dart';
 import '../utils/situacao_fluxo.dart';
 import '../widgets/app_drawer.dart';
@@ -130,21 +131,6 @@ class _FluxosPageState extends State<FluxosPage> {
   /// categoria, que fica uma linha abaixo dele.
   static const double _alturaControle = 40;
 
-  static const List<String> _nomesMeses = [
-    'Janeiro',
-    'Fevereiro',
-    'Março',
-    'Abril',
-    'Maio',
-    'Junho',
-    'Julho',
-    'Agosto',
-    'Setembro',
-    'Outubro',
-    'Novembro',
-    'Dezembro',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -164,8 +150,7 @@ class _FluxosPageState extends State<FluxosPage> {
 
   static String _chave(DateTime mes) => '${mes.year}-${mes.month}';
 
-  String _rotuloMes(DateTime mes) =>
-      '${_nomesMeses[mes.month - 1]} ${mes.year}';
+  String _rotuloMes(DateTime mes) => rotuloMes(mes);
 
   // ---------------------------------------------------------------- dados
 
