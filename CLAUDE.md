@@ -98,6 +98,16 @@ mostrar a prévia no cabeçalho enquanto o lojista escolhe a data. O POST **não
 `id_fatura`: quem resolve é o servidor, e se as duas divergirem o sintoma é uma prévia
 errada — não um lançamento na fatura errada.
 
+**O cadastro não pergunta a categoria da fatura, e a coluna não existe.** A despesa gerada
+no fechamento nasce sem categoria, como todo lançamento do app, e quem quiser categorizá-la
+o faz na própria despesa em Despesas — `finance_cartao` não tem `id_categoria` (ver o
+comentário no lugar dela em `migration_cartao_credito.sql`) e `FecharFatura` grava 0.
+
+`Cartao.idCategoria` **ainda existe no model Dart**, e é resíduo: o `toJson` manda a chave,
+a API a ignora, e o `fromJson` lê 0 porque a resposta não a traz. Nada quebra — é só código
+morto esperando limpeza, junto com a asserção do `paraCartao` em `test/cartao_test.dart`,
+que hoje só prova que o model é consistente consigo mesmo.
+
 **Parcelamento vai numa chamada, ao contrário do caixa.** `FluxoFormDialog` faz N POST;
 aqui `total_parcelas > 1` vai num POST só, porque as N parcelas têm de cair em faturas
 **consecutivas** e N chamadas deixariam a sequência com buraco se a rede caísse no meio. O

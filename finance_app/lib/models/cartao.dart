@@ -127,9 +127,15 @@ class Cartao {
   final int diaFechamento;
   final int diaVencimento;
 
-  /// Categoria que a despesa da fatura recebe no caixa; 0 é "sem categoria".
-  /// Fica no cartão e não é escolhida a cada fechamento porque a resposta é
-  /// sempre a mesma.
+  /// Categoria que a despesa da fatura recebe no caixa; 0 é "sem categoria", e é
+  /// o que todo cartão grava hoje — o campo **não** está no formulário de
+  /// cadastro, e a despesa do fechamento nasce sem categoria, como qualquer
+  /// lançamento do app.
+  ///
+  /// O campo continua no model porque o `UPDATE` da API escreve a coluna sempre:
+  /// ele precisa devolver o valor que está gravado, senão uma edição de nome
+  /// apagaria a categoria de um cartão cadastrado antes da mudança. Ver
+  /// `CartaoFormDialog._salvar`.
   final int idCategoria;
 
   const Cartao({

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/cartao.dart';
-import '../models/categoria.dart';
 import '../models/conta.dart';
 import '../services/api_service.dart';
 import '../services/cartoes_cache.dart';
@@ -10,7 +9,6 @@ import '../services/global_state.dart';
 import '../services/logger_service.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
-import '../utils/categoria_visuais.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/currency_input_formatter.dart';
 import '../utils/responsive_utils.dart';
@@ -51,14 +49,7 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
   /// Conta que paga a fatura; 0 é "sem conta".
   int _idConta = 0;
 
-  /// Categoria da despesa da fatura no caixa; 0 é "sem categoria".
-  int _idCategoria = 0;
-
   List<Conta> _contas = const [];
-
-  /// Só as de despesa: a fatura é uma saída, e oferecer categoria de receita aqui
-  /// gravaria um vínculo que a tela de Despesas nunca mostraria.
-  List<Categoria> _categorias = const [];
 
   bool get _editando => widget.cartao != null;
 
@@ -75,7 +66,6 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
       _diaFechamento = cartao.diaFechamento;
       _diaVencimento = cartao.diaVencimento;
       _idConta = cartao.idConta;
-      _idCategoria = cartao.idCategoria;
       // Pré-formatado: o campo é mascarado, então "8000" cru entraria como
       // R$ 80,00 na primeira tecla.
       _limiteController.text =
@@ -83,7 +73,6 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
     }
 
     _carregarContas();
-    _carregarCategorias();
   }
 
   @override
@@ -113,31 +102,6 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
         _idConta = 0;
       }
     });
-  }
-
-  Future<void> _carregarCategorias() async {
-    try {
-      final categorias = await _apiService.listCategorias();
-      if (!mounted) return;
-
-      final despesas = categorias.where((c) => c.tipoFluxo == 2).toList();
-      despesas.sort((a, b) => a.descricao.compareTo(b.descricao));
-
-      setState(() {
-        _categorias = despesas;
-        if (_idCategoria != 0 && !_categorias.any((c) => c.id == _idCategoria)) {
-          _idCategoria = 0;
-        }
-      });
-    } catch (e, s) {
-      // Sem isto a falha é invisível: o seletor abre vazio e o lojista conclui
-      // que não tem categoria de despesa cadastrada.
-      await _logger.logError(
-        'CartaoFormDialog._carregarCategorias',
-        e,
-        stackTrace: s,
-      );
-    }
   }
 
   void _showError(String message) {
@@ -173,7 +137,12 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
       idConta: _idConta,
       diaFechamento: _diaFechamento,
       diaVencimento: _diaVencimento,
-      idCategoria: _idCategoria,
+      // A categoria da fatura saiu do formulário: a despesa gerada no
+      // fechamento nasce sem categoria, como todo lançamento do app. O valor
+      // gravado ainda é devolvido porque o `UPDATE` da API escreve a coluna
+      // sempre — mandar 0 por omissão apagaria, em silêncio, a categoria de um
+      // cartão cadastrado antes desta mudança.
+      idCategoria: widget.cartao?.idCategoria ?? 0,
     );
 
     try {
@@ -214,7 +183,16 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
         stackTrace: s,
         additionalInfo: {'edicao': _editando, 'bandeira': _bandeira},
       );
-      if (mounted) _showError('Não foi possível salvar o cartão: $e');
+      // A mensagem da API é a que vale aqui ("Informe o nome do cartão",
+      // "Conta de pagamento não encontrada"): ela diz o que corrigir. O prefixo
+      // `Exception: ` que o Dart carimba no `toString` sai fora — não é
+      // informação para o lojista.
+      if (mounted) {
+        _showError(
+          'Não foi possível salvar o cartão: '
+          '${'$e'.replaceFirst('Exception: ', '')}',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -302,8 +280,6 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
                 const Divider(height: AppSpacing.xl),
 
                 _buildConta(),
-                const SizedBox(height: AppSpacing.md),
-                _buildCategoria(),
 
                 // Arquivar só faz sentido para cartão que já existe: o novo
                 // nasce ativo, e oferecer o contrário no cadastro só confundiria.
@@ -470,49 +446,6 @@ class _CartaoFormDialogState extends State<CartaoFormDialog> {
           ),
       ],
       onChanged: (v) => setState(() => _idConta = v ?? 0),
-    );
-  }
-
-  Widget _buildCategoria() {
-    return DropdownButtonFormField<int>(
-      value: _idCategoria,
-      isDense: true,
-      isExpanded: true,
-      decoration: const InputDecoration(
-        isDense: true,
-        labelText: 'Categoria da fatura',
-        // Fica no cartão e não é perguntada a cada fechamento porque a resposta
-        // é sempre a mesma — perguntá-la todo mês transformaria um clique num
-        // formulário.
-        helperText: 'Usada na despesa gerada ao fechar a fatura',
-        helperMaxLines: 2,
-      ),
-      items: [
-        const DropdownMenuItem(value: 0, child: Text('Sem categoria')),
-        for (final c in _categorias)
-          if (c.id != null)
-            DropdownMenuItem(
-              value: c.id!,
-              child: Row(
-                children: [
-                  Icon(
-                    CategoriaVisuais.icone(c.icone),
-                    size: 18,
-                    color: CategoriaVisuais.cor(c.cor),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      c.descricao,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-      ],
-      onChanged: (v) => setState(() => _idCategoria = v ?? 0),
     );
   }
 }
