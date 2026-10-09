@@ -114,6 +114,12 @@ class AppDrawer extends StatelessWidget {
                 ),
                 _buildMenuItem(
                   context,
+                  icon: Icons.credit_card,
+                  title: 'Cartões',
+                  route: '/cartoes',
+                ),
+                _buildMenuItem(
+                  context,
                   icon: Icons.arrow_upward,
                   title: 'Receitas',
                   route: '/receitas',

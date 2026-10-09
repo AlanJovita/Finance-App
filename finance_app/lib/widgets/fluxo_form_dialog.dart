@@ -28,7 +28,13 @@ class FluxoFormDialog extends StatefulWidget {
   /// A lista precisa dela para seguir o lançamento: editar a data move a conta
   /// de mês, e sem isso a tela continuaria no mês anterior — de onde o card
   /// acabou de sair — parecendo que a alteração não foi aplicada.
-  final void Function(DateTime? vencimento) onSave;
+  ///
+  /// `parcelasReplicadas` é quantas outras parcelas receberam a alteração, e 0
+  /// quando não houve replicação. Vai junto porque quem avisa o usuário é a
+  /// tela: a replicação muda linhas que não estão em foco — pode estar em outro
+  /// mês — e sem o número a única confirmação seria o card que já estava à
+  /// vista.
+  final void Function(DateTime? vencimento, int parcelasReplicadas) onSave;
 
   const FluxoFormDialog({
     super.key,
@@ -289,6 +295,116 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     }
   }
 
+  /// Nomes de coluna da API que esta edição mudou em relação ao lançamento
+  /// original — a lista que a replicação em grupo recebe.
+  ///
+  /// Só o que mudou vai para as outras parcelas. Replicar o registro inteiro
+  /// sobrescreveria o `valor` de cada parcela já baixada com o valor desta, e a
+  /// baixa grava ali o líquido (encargos e descontos já aplicados), sem guardar
+  /// o original em lugar nenhum — ver `PagamentoDialog`.
+  ///
+  /// Vencimento e confirmação não aparecem aqui nem quando mudam: são de cada
+  /// parcela, não do lote. A API também os recusa (`CAMPOS_REPLICAVEIS`), mas
+  /// não oferecer a replicação quando foi *só* a data que mudou é o que evita
+  /// perguntar algo que não teria efeito nenhum.
+  List<String> _camposAlterados(double valor) {
+    final original = widget.fluxo;
+    if (original == null) return const [];
+
+    final campos = <String>[];
+
+    if (_descricaoController.text.trim() != (original.descricao ?? '').trim()) {
+      campos.add('descricao');
+    }
+
+    // Em centavos: comparar double a double faria 150.00 digitado diferir do
+    // 150.0 que veio da API.
+    if ((valor * 100).round() != ((original.valor ?? 0) * 100).round()) {
+      campos.add('valor');
+    }
+
+    if ((_categoriaId ?? 0) != (original.idCategoria ?? 0)) {
+      campos.add('id_categoria');
+    }
+
+    if (_idSubcategoriaParaSalvar != (original.idSubcategoria ?? 0)) {
+      campos.add('id_subcategoria');
+    }
+
+    if (_contaId != (original.idConta ?? 0)) {
+      campos.add('id_conta');
+    }
+
+    if (_repeticao != (original.repeticao ?? '1')) {
+      campos.add('repeticao');
+    }
+
+    return campos;
+  }
+
+  /// Pergunta se a alteração vale para o parcelamento inteiro.
+  ///
+  /// Devolve `null` quando o usuário desiste de salvar — "não replicar" e
+  /// "cancelar" são respostas diferentes, e tratar as duas como `false` gravaria
+  /// a edição de quem clicou em Cancelar.
+  ///
+  /// A caixa nasce desmarcada: o padrão de uma edição continua sendo mexer só na
+  /// conta aberta. Só aparece quando há parcelamento (`id_ref > 0`) **e** algo
+  /// replicável mudou.
+  Future<bool?> _perguntarReplicar() async {
+    var replicar = false;
+
+    final confirmou = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setStateDialog) => AlertDialog(
+                  title: const Text('Salvar alteração'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Esta conta faz parte de um parcelamento.',
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      CheckboxListTile(
+                        value: replicar,
+                        onChanged:
+                            (marcado) => setStateDialog(
+                              () => replicar = marcado ?? false,
+                            ),
+                        title: const Text(
+                          'Aplicar a mesma alteração às outras parcelas',
+                        ),
+                        subtitle: const Text(
+                          'O vencimento de cada parcela é mantido, e as '
+                          'parcelas já baixadas não são alteradas.',
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Salvar'),
+                    ),
+                  ],
+                ),
+          ),
+    );
+
+    return confirmou == true ? replicar : null;
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -327,9 +443,26 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         return;
       }
 
+      // A pergunta vem antes do spinner: ela é parte da decisão de salvar, e
+      // cancelar aqui tem que deixar o formulário como estava.
+      final camposParaReplicar =
+          (widget.fluxo?.idRef ?? 0) > 0
+              ? _camposAlterados(valorBase)
+              : const <String>[];
+
+      var replicar = false;
+      if (camposParaReplicar.isNotEmpty) {
+        final resposta = await _perguntarReplicar();
+        if (resposta == null) return;
+        replicar = resposta;
+      }
+
+      if (!mounted) return;
       setState(() => _isLoading = true);
 
       final tipoFluxoValue = widget.tipoFluxo == 'receita' ? '1' : '2';
+
+      var parcelasReplicadas = 0;
 
       try {
         // Se for edição simples
@@ -352,6 +485,17 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
             idConta: _contaId,
           );
           await _apiService.updateFluxo(fluxo);
+
+          // Nesta ordem, e não ao contrário: esta parcela é a única que recebe o
+          // vencimento e a confirmação do formulário, e a API deixa a linha
+          // editada fora do escopo da replicação justamente porque ela já foi
+          // gravada aqui.
+          if (replicar) {
+            parcelasReplicadas = await _apiService.updateFluxoGrupo(
+              fluxo,
+              camposParaReplicar,
+            );
+          }
         } else {
           // Nova entrada
           if (_repeticao == '1') {
@@ -415,7 +559,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
         // No parcelamento a primeira parcela vence nesta data, então é também
         // para este mês que a lista deve ir.
-        widget.onSave(_dataVencimento ?? DateTime.now());
+        widget.onSave(_dataVencimento ?? DateTime.now(), parcelasReplicadas);
       } catch (e, s) {
         // No parcelamento o POST é um por parcela: saber em qual repetição
         // parou é a diferença entre "nada foi salvo" e "metade foi".

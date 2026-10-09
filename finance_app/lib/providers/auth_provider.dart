@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import '../services/cartoes_cache.dart';
 import '../services/contas_cache.dart';
 import '../services/global_state.dart';
 import '../services/logger_service.dart';
@@ -110,9 +111,11 @@ class AuthProvider with ChangeNotifier {
     _idLojas = [];
     GlobalState().idLojas = [];
     GlobalState().cnpj = '';
-    // A lista de contas é de uma loja: sobrevivendo ao logout, a sessão seguinte
-    // abriria o modal de lançamento oferecendo as contas da loja anterior.
+    // As listas de contas e de cartões são de uma loja: sobrevivendo ao logout, a
+    // sessão seguinte abriria o modal de lançamento oferecendo as contas e os
+    // cartões da loja anterior.
     ContasCache().limpar();
+    CartoesCache().limpar();
     _isAuthenticated = false;
 
     try {

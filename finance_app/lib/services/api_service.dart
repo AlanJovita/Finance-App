@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/fluxo_caixa.dart';
+import '../models/cartao.dart';
 import '../models/categoria.dart';
 import '../models/conta.dart';
 import '../models/subcategoria.dart';
@@ -297,6 +298,50 @@ class ApiService {
     }
   }
 
+  /// Replica os campos de uma edição para as outras parcelas do mesmo `id_ref`.
+  ///
+  /// [campos] são os nomes de coluna da API (`id_categoria`, `valor`, …) que o
+  /// usuário efetivamente alterou — e não o registro inteiro: replicar tudo
+  /// sobrescreveria o valor líquido que a baixa gravou em cada parcela já paga.
+  /// A API descarta nome fora da lista dela e nunca toca parcela confirmada.
+  ///
+  /// Devolve quantas parcelas foram atualizadas.
+  Future<int> updateFluxoGrupo(FluxoCaixa fluxo, List<String> campos) async {
+    final corpo = {...fluxo.toJson(), 'campos': campos};
+
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/fluxo/grupo'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(corpo),
+        ),
+        'updateFluxoGrupo',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao replicar a alteração.');
+      }
+
+      final data = response['data'];
+      return data is Map ? (data['atualizados'] as num?)?.toInt() ?? 0 : 0;
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateFluxoGrupo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: corpo,
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga um lançamento, ou o parcelamento inteiro.
+  ///
+  /// [idRef] é o seletor, não um dado de contexto: positivo apaga **todas** as
+  /// linhas com aquele `id_ref` da loja, 0 apaga só o [id]. Quem chama decide —
+  /// passar `fluxo.idRef` por reflexo transforma a exclusão de uma parcela na
+  /// exclusão do lote.
   Future<Map<String, dynamic>> deleteFluxo(int id, int idRef) async {
     try {
       final idLoja = GlobalState().firstIdLoja;
@@ -713,7 +758,7 @@ class ApiService {
 
   /// Apaga as duas pernas de uma transferência de uma vez.
   ///
-  /// Não dá para usar [deleteFluxo] aqui: ele agrupa por `id_ref`, que numa
+  /// Não dá para usar [deleteFluxo] aqui: ele só agrupa por `id_ref`, que numa
   /// transferência é 0 — apagaria um lado só e deixaria as duas contas com saldo
   /// errado.
   Future<void> deleteTransferencia(int idTransferencia) async {
@@ -738,6 +783,451 @@ class ApiService {
         e,
         stackTrace: stackTrace,
         additionalInfo: {'idTransferencia': idTransferencia},
+      );
+      rethrow;
+    }
+  }
+
+  // Endpoints de Cartão de crédito
+  //
+  // Nenhum destes endpoints mexe nos de Fluxo acima, e é por isso que as telas de
+  // Receitas e Despesas não mudaram: compra no cartão não é saída de caixa. O que
+  // entra em `finance_fluxo_caixa` é só a despesa da fatura, gerada pelo
+  // [fecharFatura] — e ela é **uma só** por fatura, o que faz [pagarFatura] dar
+  // baixa nela em vez de criar outra.
+
+  /// Cartões da loja, ativos primeiro.
+  ///
+  /// Quem chama isto é o [CartoesCache], uma vez por sessão — mesma razão do
+  /// [listContas].
+  Future<List<Cartao>> listCartoes() async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/finance/cartao/list/$idLoja')),
+        'listCartoes',
+      );
+
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => Cartao.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao listar cartões.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listCartoes',
+        e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Saldo devedor, limite e recorte por fatura de cada cartão.
+  ///
+  /// Sem parâmetro de período, ao contrário do [getSaldosContas]: dívida de
+  /// cartão é um número de **agora**, não um acumulado até uma data. Quem navega
+  /// por mês é a tela da fatura, via [getFatura].
+  Future<List<ResumoCartao>> getResumoCartoes() async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.get(Uri.parse('$_baseUrl/finance/cartao/resumo/$idLoja')),
+        'getResumoCartoes',
+      );
+
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => ResumoCartao.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao carregar os cartões.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getResumoCartoes',
+        e,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
+  }
+
+  /// Devolve o id gerado, ou `null` quando a API confirmou a criação sem informar
+  /// o id — a mesma distinção de [createConta], pelo mesmo motivo: tratar os dois
+  /// como erro levaria o usuário a repetir e duplicar o cartão.
+  Future<int?> createCartao(Cartao cartao) async {
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/cartao'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(cartao.toJson()),
+        ),
+        'createCartao',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao criar o cartão.');
+      }
+      return _idCriado(response);
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.createCartao',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'cartao': cartao.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> updateCartao(Cartao cartao) async {
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/cartao'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(cartao.toJson()),
+        ),
+        'updateCartao',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao salvar o cartão.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateCartao',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'cartao': cartao.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga o cartão.
+  ///
+  /// Sem [comMovimentos], a API **recusa** cartão com lançamento e devolve a
+  /// contagem em `data[0]['quantidade']`: não existe "mover para outro cartão"
+  /// (cada um tem o seu ciclo de fechamento), e o caminho normal para parar de
+  /// usar um cartão é arquivar.
+  ///
+  /// Devolve a quantidade quando a recusa foi por isso, e `null` quando apagou.
+  /// Falha de verdade vira exceção — tratar a recusa como erro faria a tela dizer
+  /// "não foi possível" em vez de oferecer a escolha.
+  Future<int?> deleteCartao(int id, {bool comMovimentos = false}) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final uri = Uri.parse('$_baseUrl/finance/cartao/$id/$idLoja').replace(
+        queryParameters: comMovimentos ? {'com_movimentos': '1'} : null,
+      );
+
+      final response = await _handleRequest(() => http.delete(uri), 'deleteCartao');
+
+      if (response['success'] == true) return null;
+
+      final quantidade = _quantidade(response);
+      if (quantidade != null) return quantidade;
+
+      throw Exception(response['msg'] ?? 'Erro ao apagar o cartão.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteCartao',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id, 'comMovimentos': comMovimentos},
+      );
+      rethrow;
+    }
+  }
+
+  /// `data: [{quantidade: N}]` de uma recusa que é informação, não falha.
+  int? _quantidade(Map<String, dynamic> response) {
+    final data = response['data'];
+    if (data is List && data.isNotEmpty && data.first is Map) {
+      final q = (data.first as Map)['quantidade'];
+      if (q is num) return q.toInt();
+    }
+    return null;
+  }
+
+  /// A fatura, os totais e os movimentos dela — uma requisição.
+  ///
+  /// [competencia] é o mês da fatura; sem ela, a API devolve a fatura **aberta**
+  /// (a que uma compra de hoje receberia). Competência sem lançamento nenhum não
+  /// é erro: vem a fatura vazia, com `id == 0` e as datas do ciclo do cartão.
+  Future<FaturaDetalhe> getFatura(int idCartao, {DateTime? competencia}) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{};
+    if (competencia != null) {
+      params['competencia'] = chaveCompetencia(competencia);
+    }
+
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/finance/cartao/fatura/$idLoja/$idCartao',
+      ).replace(queryParameters: params.isEmpty ? null : params);
+
+      final response = await _handleRequest(() => http.get(uri), 'getFatura');
+
+      if (response['success'] == true) {
+        return FaturaDetalhe.fromJson(response['data'] as Map<String, dynamic>);
+      }
+      throw Exception(response['msg'] ?? 'Erro ao carregar a fatura.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getFatura',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idCartao': idCartao, ...params},
+      );
+      rethrow;
+    }
+  }
+
+  /// As competências que têm fatura, com saldo — alimenta o atalho de meses.
+  Future<List<ResumoFatura>> listFaturas(int idCartao) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$_baseUrl/finance/cartao/faturas/$idLoja/$idCartao'),
+        ),
+        'listFaturas',
+      );
+
+      if (response['success'] == true) {
+        final List<dynamic> list = response['data'] ?? [];
+        return list.map((item) => ResumoFatura.fromJson(item)).toList();
+      }
+      throw Exception(response['msg'] ?? 'Erro ao listar as faturas.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.listFaturas',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idCartao': idCartao},
+      );
+      rethrow;
+    }
+  }
+
+  /// Fecha a fatura e gera a despesa dela no caixa.
+  ///
+  /// O ponto em que o cartão vira dinheiro. A despesa nasce **não confirmada**,
+  /// vencendo na data de vencimento da fatura e debitando a conta de pagamento do
+  /// cartão. Fatura sem saldo fecha sem gerar despesa, e aí o `id_fluxo` volta 0.
+  ///
+  /// Devolve o valor congelado, para a tela confirmar o que foi gerado.
+  Future<double> fecharFatura(int idFatura) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/cartao/fatura/fechar/$idLoja/$idFatura'),
+        ),
+        'fecharFatura',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao fechar a fatura.');
+      }
+
+      final data = response['data'];
+      if (data is List && data.isNotEmpty && data.first is Map) {
+        final valor = (data.first as Map)['valor'];
+        if (valor is num) return valor.toDouble();
+      }
+      return 0.0;
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.fecharFatura',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idFatura': idFatura},
+      );
+      rethrow;
+    }
+  }
+
+  /// Desfaz o fechamento: apaga a despesa gerada e reabre a fatura.
+  ///
+  /// DELETE do mesmo recurso que o POST cria — o fechamento. A API recusa com
+  /// pagamento registrado, porque apagar a despesa faria o dinheiro que saiu da
+  /// conta desaparecer do caixa.
+  Future<void> reabrirFatura(int idFatura) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.delete(
+          Uri.parse('$_baseUrl/finance/cartao/fatura/fechar/$idLoja/$idFatura'),
+        ),
+        'reabrirFatura',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao reabrir a fatura.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.reabrirFatura',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idFatura': idFatura},
+      );
+      rethrow;
+    }
+  }
+
+  /// Registra o pagamento da fatura: crédito no cartão + baixa no caixa.
+  ///
+  /// [valor] nulo é "pagar o saldo", que é o caso normal.
+  ///
+  /// A saída de caixa **não é uma despesa nova**: é a baixa da despesa que o
+  /// fechamento já gerou. Criar outra aqui faria a mesma fatura sair da conta
+  /// duas vezes — é o invariante de uma despesa por fatura, e é por isso que a
+  /// API exige a fatura fechada.
+  ///
+  /// Devolve `true` quando a fatura ficou quitada; `false` em pagamento parcial,
+  /// que abate o saldo devedor do cartão mas **não** baixa a despesa (baixá-la
+  /// pela parte paga exigiria modelar crédito rotativo).
+  Future<bool> pagarFatura(
+    int idFatura, {
+    double? valor,
+    DateTime? data,
+    String? observacao,
+  }) async {
+    final corpo = <String, dynamic>{
+      if (valor != null) 'valor': valor,
+      if (data != null) 'data': _data(data),
+      if (observacao != null && observacao.trim().isNotEmpty)
+        'observacao': observacao.trim(),
+    };
+
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/cartao/fatura/pagar/$idLoja/$idFatura'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(corpo),
+        ),
+        'pagarFatura',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao registrar o pagamento.');
+      }
+
+      final data = response['data'];
+      if (data is List && data.isNotEmpty && data.first is Map) {
+        return (data.first as Map)['quitada'] == true;
+      }
+      return false;
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.pagarFatura',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'idFatura': idFatura, ...corpo},
+      );
+      rethrow;
+    }
+  }
+
+  /// Lança compra, estorno ou cashback no cartão.
+  ///
+  /// `total_parcelas > 1` cria as N linhas em faturas **consecutivas**, numa
+  /// chamada: resolver a sequência no servidor é o que garante que ela não tenha
+  /// buraco se a rede cair no meio — diferente do parcelamento do caixa, que o
+  /// formulário monta com N POST. `valor` é o de **cada parcela**.
+  ///
+  /// Pagamento de fatura não passa por aqui: é [pagarFatura], porque paga uma
+  /// fatura escolhida e dá baixa na despesa dela.
+  Future<void> createMovimentoCartao(MovimentoCartao movimento) async {
+    try {
+      final response = await _handleRequest(
+        () => http.post(
+          Uri.parse('$_baseUrl/finance/cartao/movimento'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(movimento.toJson()),
+        ),
+        'createMovimentoCartao',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao lançar no cartão.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.createMovimentoCartao',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'movimento': movimento.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Edita um lançamento do cartão.
+  ///
+  /// A API recusa quando a fatura já foi fechada — o valor dela foi congelado e
+  /// virou uma despesa no caixa. A mensagem diz para reabrir a fatura, e é ela
+  /// que a tela mostra.
+  Future<void> updateMovimentoCartao(MovimentoCartao movimento) async {
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/cartao/movimento'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(movimento.toJson()),
+        ),
+        'updateMovimentoCartao',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao salvar o lançamento.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateMovimentoCartao',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'movimento': movimento.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga um lançamento do cartão, ou a compra parcelada inteira.
+  ///
+  /// [idRef] é o **seletor**, não um dado de contexto — exatamente como no
+  /// [deleteFluxo]: positivo apaga todas as parcelas daquele `id_ref`, 0 apaga só
+  /// o [id]. Passar `movimento.idRef` por reflexo transforma "excluir esta
+  /// parcela" em "excluir a compra".
+  Future<void> deleteMovimentoCartao(int id, int idRef) async {
+    try {
+      final idLoja = GlobalState().firstIdLoja;
+
+      final response = await _handleRequest(
+        () => http.delete(
+          Uri.parse('$_baseUrl/finance/cartao/movimento/$id/$idLoja/$idRef'),
+        ),
+        'deleteMovimentoCartao',
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao excluir o lançamento.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteMovimentoCartao',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id, 'idRef': idRef},
       );
       rethrow;
     }

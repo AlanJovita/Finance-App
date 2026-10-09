@@ -78,6 +78,11 @@ flutter:
     # Subpasta precisa ser declarada: `assets/images/` não entra em subdiretório.
     # Logos das instituições do cadastro de conta bancária — ver o README de lá.
     - assets/images/bancos/
+    # Logos das bandeiras do cadastro de cartão de crédito. Pasta separada de
+    # `bancos/` porque são dois catálogos e dois campos: um cartão tem bandeira
+    # **e** banco emissor, e eles variam independentemente (Nubank Visa × Nubank
+    # Mastercard).
+    - assets/images/bandeiras/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

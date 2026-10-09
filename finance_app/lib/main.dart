@@ -7,6 +7,7 @@ import 'providers/theme_provider.dart';
 import 'pages/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/lista_caixas_page.dart';
+import 'pages/cartoes_page.dart';
 import 'pages/contas_page.dart';
 import 'pages/fluxos_page.dart';
 import 'utils/app_theme.dart';
@@ -67,6 +68,7 @@ class MyApp extends StatelessWidget {
                     token == 'dashboard' ||
                     token == 'caixas' ||
                     token == 'contas' ||
+                    token == 'cartoes' ||
                     token == 'receitas' ||
                     token == 'despesas') {
                   return null; // Deixa as rotas normais funcionarem
@@ -89,6 +91,7 @@ class MyApp extends StatelessWidget {
               '/dashboard': (context) => const DashboardPage(),
               '/caixas': (context) => const ListaCaixasPage(),
               '/contas': (context) => const ContasPage(),
+              '/cartoes': (context) => const CartoesPage(),
               '/receitas': (context) => const FluxosPage(tipo: TipoFluxo.receita),
               '/despesas': (context) => const FluxosPage(tipo: TipoFluxo.despesa),
             },

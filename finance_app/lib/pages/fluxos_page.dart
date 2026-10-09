@@ -372,17 +372,25 @@ class _FluxosPageState extends State<FluxosPage> {
         return FluxoFormDialog(
           tipoFluxo: _tipo.tipoDialogo,
           fluxo: fluxo,
-          onSave: (vencimento) {
+          onSave: (vencimento, parcelasReplicadas) {
             Navigator.of(context).pop();
             _recarregarApos(vencimento);
             // O formulário fechava calado: sem confirmação, "não atualizou" e
             // "não gravou" ficavam indistinguíveis para quem está olhando.
+            //
+            // Quando houve replicação a contagem entra na mensagem: as outras
+            // parcelas podem estar em meses que não estão à vista, e aí o card
+            // recarregado não serve de comprovante.
             ScaffoldMessenger.of(this.context).showSnackBar(
               SnackBar(
                 content: Text(
                   fluxo == null
                       ? '${_tipo.singular[0].toUpperCase()}'
                           '${_tipo.singular.substring(1)} criada.'
+                      : parcelasReplicadas > 0
+                      ? 'Alterações salvas e replicadas para '
+                          '$parcelasReplicadas '
+                          '${parcelasReplicadas == 1 ? 'parcela' : 'parcelas'}.'
                       : 'Alterações salvas.',
                 ),
                 behavior: SnackBarBehavior.floating,
@@ -472,29 +480,95 @@ class _FluxosPageState extends State<FluxosPage> {
   Future<void> _confirmarExclusao(FluxoCaixa fluxo) async {
     final cores = context.appColors;
 
+    // `id_ref` só agrupa quando é positivo — é a condição que a API testa em
+    // `RemoveFluxoCaixa` para apagar o lote em vez da linha. Oferecer a opção
+    // para 0 (ou para um valor negativo vindo de dado ruim) daria um checkbox
+    // que não muda nada: o DELETE cairia no ramo da linha única de qualquer
+    // forma.
+    final idRef = fluxo.idRef ?? 0;
+    final ehParcelamento = idRef > 0;
+
+    // Fica fora do `builder` para sobreviver aos rebuilds do StatefulBuilder e
+    // continuar legível depois que o diálogo fecha.
+    var excluirGrupo = false;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder:
-          (context) => AlertDialog(
-            title: const Text('Confirmar exclusão'),
-            content: Text('Deseja realmente excluir "${fluxo.descricao}"?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: ElevatedButton.styleFrom(backgroundColor: cores.error),
-                child: const Text('Excluir'),
-              ),
-            ],
+          (context) => StatefulBuilder(
+            builder:
+                (context, setStateDialog) => AlertDialog(
+                  title: const Text('Confirmar exclusão'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Deseja realmente excluir "${fluxo.descricao}"?'),
+                      if (ehParcelamento) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        CheckboxListTile(
+                          value: excluirGrupo,
+                          onChanged:
+                              (marcado) => setStateDialog(
+                                () => excluirGrupo = marcado ?? false,
+                              ),
+                          // `titulo` é o plural da tela ("Receitas"/"Despesas").
+                          title: Text(
+                            'Excluir todas as ${_tipo.titulo.toLowerCase()} '
+                            'deste parcelamento',
+                          ),
+                          subtitle: const Text(
+                            'Inclui as parcelas de outros meses.',
+                          ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                        ),
+                      ],
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancelar'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: cores.error,
+                      ),
+                      child: const Text('Excluir'),
+                    ),
+                  ],
+                ),
           ),
     );
 
-    if (confirm == true) {
-      await _apiService.deleteFluxo(fluxo.id!, fluxo.idRef ?? 0);
+    if (confirm != true) return;
+
+    // `id_ref = 0` é o que pede a exclusão de uma linha só: a API só agrupa
+    // quando recebe um valor positivo. Antes deste checkbox o app mandava
+    // sempre o `id_ref` do lançamento, então apagar uma parcela derrubava o
+    // parcelamento inteiro sem avisar.
+    try {
+      await _apiService.deleteFluxo(fluxo.id!, excluirGrupo ? idRef : 0);
       _recarregar();
+    } catch (e, s) {
+      await _logger.logError(
+        'FluxosPage._confirmarExclusao',
+        e,
+        stackTrace: s,
+        additionalInfo: {
+          'idFluxo': fluxo.id,
+          'idRef': idRef,
+          'excluirGrupo': excluirGrupo,
+          'tipo': _tipo.codigo,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erro ao excluir: $e')));
     }
   }
 
