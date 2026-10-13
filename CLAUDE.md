@@ -158,13 +158,24 @@ cada bloco é a **ausência de dado**, não uma configuração: `getCaixa()` dev
 quando a loja nunca abriu caixa, e `ResumoPainel.vazio` diz que nunca houve lançamento.
 Ordem fixa quando os dois existem: caixa primeiro.
 
-Três coisas ali não são inferíveis do código.
+Quatro coisas ali não são inferíveis do código.
 
 **Os dois pedaços do caixa não ficam contíguos de propósito.** O card do último caixa está
 no topo e os gráficos de faturamento/pedidos ficam depois dos boletos e dos atalhos —
 exatamente onde estavam antes desta tela ganhar o segundo resumo. Agrupá-los empurraria o
 aviso de boleto vencendo para baixo de dois gráficos. **Boleto fica fora do bloco do
 caixa**: é cobrança do ERP, e uma loja sem caixa ainda pode ter boleto vencendo.
+
+**O caminho para a tela de Caixas some junto com o bloco**, nos dois lugares: o atalho do
+painel e o item do menu lateral (`AppDrawer`). Sem caixa os dois levavam a uma tela
+permanentemente vazia. Quem responde ao menu é o `CaixaCache` — um `bool` por sessão, no
+estilo do `ContasCache`, **semeado pelo painel** com o `getCaixa()` que ele já faz, para
+abrir o menu não disparar uma requisição por toque. O cache é tri-estado de propósito:
+`null` é "ainda não sei" e o menu trata como "esconde", porque mostrar o item e removê-lo
+meio segundo depois tiraria a opção de baixo do dedo de quem já estava tocando nela.
+`AuthProvider.logout` limpa, como os outros dois caches — herdado, ele decidiria o menu
+pela loja da sessão anterior. A rota `/caixas` continua registrada: o que sumiu foi o
+caminho até ela, não a tela. `test/menu_caixas_test.dart` trava os três estados.
 
 **Falha de um bloco não apaga o outro** (`_erroCaixa` e `_erroMovimentacoes` são
 separados). A tela de erro inteira só aparece quando os dois falharam; um bloco sozinho

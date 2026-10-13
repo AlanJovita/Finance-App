@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import '../services/caixa_cache.dart';
 import '../services/cartoes_cache.dart';
 import '../services/contas_cache.dart';
 import '../services/global_state.dart';
@@ -113,9 +114,11 @@ class AuthProvider with ChangeNotifier {
     GlobalState().cnpj = '';
     // As listas de contas e de cartões são de uma loja: sobrevivendo ao logout, a
     // sessão seguinte abriria o modal de lançamento oferecendo as contas e os
-    // cartões da loja anterior.
+    // cartões da loja anterior. O mesmo vale para "esta loja usa caixa": herdado,
+    // ele mostraria ou esconderia o menu de Caixas pela loja errada.
     ContasCache().limpar();
     CartoesCache().limpar();
+    CaixaCache().limpar();
     _isAuthenticated = false;
 
     try {

@@ -6,6 +6,7 @@ import 'package:finance_app/models/relatorio_semanal.dart';
 import 'package:finance_app/models/resumo_painel.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
+import 'package:finance_app/services/caixa_cache.dart';
 import 'package:finance_app/services/global_state.dart';
 import 'package:finance_app/services/logger_service.dart';
 import 'package:finance_app/utils/auth_actions.dart';
@@ -116,6 +117,10 @@ class _DashboardPageState extends State<DashboardPage> {
           orElse: () => relatoriosSemana.first,
         );
       }
+
+      // O menu lateral esconde "Caixas" pela mesma resposta, e é aqui que ele
+      // fica sabendo — sem isto, abrir o menu dispararia um `getCaixa` próprio.
+      CaixaCache().semear(temCaixa: caixa != null);
 
       if (!mounted) return;
       setState(() {
@@ -682,22 +687,27 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  /// Os atalhos. "Caixas" acompanha o bloco do caixa: sem caixa ele levaria a
+  /// uma tela permanentemente vazia, e o menu lateral esconde o item pelo mesmo
+  /// motivo. Receitas e Despesas ficam sempre — são o que toda loja usa.
   Widget _buildActionCardsRow(BuildContext context) {
     final theme = Theme.of(context);
     final cores = context.appColors;
 
     return Row(
       children: [
-        Expanded(
-          child: _buildActionCard(
-            context,
-            Icons.view_list,
-            '/caixas',
-            'Caixas',
-            theme.colorScheme.primary,
+        if (_temCaixa) ...[
+          Expanded(
+            child: _buildActionCard(
+              context,
+              Icons.view_list,
+              '/caixas',
+              'Caixas',
+              theme.colorScheme.primary,
+            ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.md),
+          const SizedBox(width: AppSpacing.md),
+        ],
         Expanded(
           child: _buildActionCard(
             context,

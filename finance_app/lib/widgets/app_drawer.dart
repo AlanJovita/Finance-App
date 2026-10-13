@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/caixa_cache.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/auth_actions.dart';
 
+/// O menu lateral do app.
+///
+/// **"Caixas" só aparece para quem usa caixa.** Loja que não tem o PDV nunca
+/// teve uma linha em `finance_caixa`, e o item levava a uma tela permanentemente
+/// vazia — o mesmo motivo que esconde o bloco do caixa no painel. Quem responde
+/// é o [CaixaCache], que o painel já semeou: o menu não dispara requisição a
+/// cada abertura.
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key});
+  /// Injetável para o teste não depender de rede. Nulo — o normal — faz o menu
+  /// perguntar ao [CaixaCache].
+  final bool? temCaixa;
+
+  const AppDrawer({super.key, this.temCaixa});
 
   @override
   Widget build(BuildContext context) {
@@ -100,12 +112,7 @@ class AppDrawer extends StatelessWidget {
                   title: 'Resumo',
                   route: '/dashboard',
                 ),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.view_list,
-                  title: 'Caixas',
-                  route: '/caixas',
-                ),
+                _itemCaixas(context),
                 _buildMenuItem(
                   context,
                   icon: Icons.account_balance,
@@ -183,6 +190,40 @@ class AppDrawer extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// "Caixas", quando a loja usa caixa.
+  ///
+  /// Enquanto a resposta não chegou o item **não** é desenhado, e não o
+  /// contrário: mostrá-lo e removê-lo meio segundo depois tiraria a opção de
+  /// baixo do dedo de quem já estava tocando nela. Na prática o painel semeia o
+  /// cache antes de o menu existir, e o `FutureBuilder` resolve no primeiro
+  /// frame.
+  Widget _itemCaixas(BuildContext context) {
+    final item = _buildMenuItem(
+      context,
+      icon: Icons.view_list,
+      title: 'Caixas',
+      route: '/caixas',
+    );
+
+    final forcado = temCaixa;
+    if (forcado != null) {
+      return forcado ? item : const SizedBox.shrink();
+    }
+
+    final cache = CaixaCache();
+    final conhecido = cache.temCaixa;
+    if (conhecido != null) {
+      return conhecido ? item : const SizedBox.shrink();
+    }
+
+    return FutureBuilder<bool>(
+      future: cache.obter(),
+      builder:
+          (context, snapshot) =>
+              snapshot.data == true ? item : const SizedBox.shrink(),
     );
   }
 
