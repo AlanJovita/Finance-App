@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import '../../models/relatorio_mensal.dart';
 import '../../utils/app_tokens.dart';
+import 'legenda_chart.dart';
 
 /// Faturamento e pedidos dos últimos meses, em colunas.
 ///
@@ -95,7 +96,7 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
           meses: meses,
           valorDe: (r) => r.somaSaldo ?? 0,
           formatar: CurrencyFormatter.format,
-          formatarEixo: (v) => 'R\$ ${_compacto(v)}',
+          formatarEixo: (v) => 'R\$ ${CurrencyFormatter.compacto(v)}',
         ),
         const SizedBox(height: 16),
         _buildGrafico(
@@ -420,39 +421,10 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
     return '${r.nomeMesAbreviado}/${ano.toString().padLeft(2, '0')}';
   }
 
-  /// Abrevia o eixo: 1.2M, 45k, 980.
-  String _compacto(double v) {
-    if (v.abs() >= 1000000) {
-      return '${(v / 1000000).toStringAsFixed(1).replaceAll('.', ',')}M';
-    }
-    if (v.abs() >= 1000) return '${(v / 1000).round()}k';
-    return v.round().toString();
-  }
-
-  Widget _legenda(String label, Color color, {bool tracejada = false}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        tracejada
-            ? SizedBox(
-              width: 20,
-              height: 3,
-              child: CustomPaint(painter: _TracoTracejado(color)),
-            )
-            : Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-        const SizedBox(width: AppSpacing.sm),
-        // A tinta do rótulo é de texto; a identidade vem da marca ao lado.
-        Text(label, style: Theme.of(context).textTheme.labelMedium),
-      ],
-    );
-  }
+  /// A tinta do rótulo é de texto; a identidade vem da marca ao lado — ver
+  /// [LegendaChart].
+  Widget _legenda(String label, Color color, {bool tracejada = false}) =>
+      LegendaChart(rotulo: label, cor: color, tracejada: tracejada);
 }
 
 /// Passos validados do par de ênfase. Ficam aqui, e não em `AppColors`, porque
@@ -462,31 +434,3 @@ const Color _destaqueLight = Color(0xFF2A78D6);
 const Color _contextoLight = Color(0xFF8A919C);
 const Color _destaqueDark = Color(0xFF4F97F2);
 const Color _contextoDark = Color(0xFF6B7689);
-
-class _TracoTracejado extends CustomPainter {
-  final Color cor;
-
-  const _TracoTracejado(this.cor);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p =
-        Paint()
-          ..color = cor
-          ..strokeWidth = 2;
-    const traco = 4.0;
-    const vao = 3.0;
-    var x = 0.0;
-    while (x < size.width) {
-      canvas.drawLine(
-        Offset(x, size.height / 2),
-        Offset((x + traco).clamp(0, size.width), size.height / 2),
-        p,
-      );
-      x += traco + vao;
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TracoTracejado old) => old.cor != cor;
-}

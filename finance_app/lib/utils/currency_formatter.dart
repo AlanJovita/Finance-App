@@ -52,6 +52,22 @@ class CurrencyFormatter {
     return '$formattedInteger,$decimalPart';
   }
 
+  /// Abrevia para caber num eixo de gráfico: 1,2M, 45k, 980.
+  ///
+  /// Mora aqui, e não dentro de um gráfico, porque os eixos de dois arquivos
+  /// diferentes precisam abreviar igual — eixos com arredondamento diferente na
+  /// mesma tela leem como escalas diferentes.
+  ///
+  /// Sem o `R$`: quem chama decide o prefixo, e o eixo de "pedidos" usa a mesma
+  /// abreviação sem ser dinheiro.
+  static String compacto(double value) {
+    if (value.abs() >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1).replaceAll('.', ',')}M';
+    }
+    if (value.abs() >= 1000) return '${(value / 1000).round()}k';
+    return value.round().toString();
+  }
+
   /// Formata valores simplificados (apenas substitui ponto por vírgula)
   ///
   /// Exemplo: 1234.56 -> "1234,56"

@@ -148,6 +148,57 @@ status desconhecido caindo em *aberta*, `pagamento` fora de `creditosLancaveis`,
 `limite_disponivel` nulo que não pode virar 0, e a tolerância de meio centavo que impede um
 resíduo de `decimal(11,2)` de deixar a fatura "paga em parte" para sempre.
 
+**Painel** (`lib/pages/dashboard_page.dart`): a tela tem **dois resumos independentes**, e
+cada um aparece só se tiver assunto — o do caixa e o das receitas/despesas.
+
+Quem não usa o PDV não tem linha nenhuma em `finance_caixa`, e o painel abria com um card
+escrito "Nenhum caixa disponível" seguido de dois gráficos vazios, para uma loja que lança
+contas todo dia. Quem usa o PDV e não lança conta tinha o problema espelhado. O sinal de
+cada bloco é a **ausência de dado**, não uma configuração: `getCaixa()` devolve `null`
+quando a loja nunca abriu caixa, e `ResumoPainel.vazio` diz que nunca houve lançamento.
+Ordem fixa quando os dois existem: caixa primeiro.
+
+Três coisas ali não são inferíveis do código.
+
+**Os dois pedaços do caixa não ficam contíguos de propósito.** O card do último caixa está
+no topo e os gráficos de faturamento/pedidos ficam depois dos boletos e dos atalhos —
+exatamente onde estavam antes desta tela ganhar o segundo resumo. Agrupá-los empurraria o
+aviso de boleto vencendo para baixo de dois gráficos. **Boleto fica fora do bloco do
+caixa**: é cobrança do ERP, e uma loja sem caixa ainda pode ter boleto vencendo.
+
+**Falha de um bloco não apaga o outro** (`_erroCaixa` e `_erroMovimentacoes` são
+separados). A tela de erro inteira só aparece quando os dois falharam; um bloco sozinho
+que falha mostra um aviso no lugar dele, e não some — sumir é o que a tela faz quando a
+loja de fato não tem o dado, e os dois casos não podem parecer iguais.
+
+**Tudo de movimentação vem de uma requisição só** (`getResumoPainel` →
+`/fluxo/resumo/painel`), inclusive as 10 últimas de cada natureza. As categorias vêm à
+parte porque a API devolve só `id_categoria`: nome, cor e ícone saem do mesmo
+`listCategorias` que as telas de Receitas e Despesas usam, e é isso que faz a fatia da
+pizza e o card da lista terem a mesma cor. O painel é **somente leitura** — editar e dar
+baixa continuam nas telas da natureza, para o `FluxoFormDialog`, o `PagamentoDialog` e a
+regra de parcelamento não ganharem uma segunda cópia.
+
+Dois recortes da API valem para quem for ler os números (detalhados no CLAUDE.md de lá):
+atraso e pendente **não** são do mês, e o mês em foco é o que o **servidor** resolveu
+(`ResumoPainel.mes`) — a tela não recalcula com `DateTime.now()`, porque o relógio do
+aparelho pode estar noutro dia.
+
+**Gráficos do painel** (`lib/widgets/charts/`): `FluxoAcumuladoChart` é acumulado e não
+barra por dia porque a pergunta é "quanto já entrou e quanto vou fechar", um total
+correndo — e 31 colunas num celular ficam com 8px. As duas pontas da curva fecham com o
+card de saldos ao lado (fim do previsto = `receitas_previsto`; fim do realizado =
+`receitas_realizado`); se não fecharem, uma das duas está somando outra coisa. O realizado
+**para em hoje** em vez de seguir reto até o fim do mês: a linha chapada afirmaria "nada
+mais entrou" onde o certo é "ainda não aconteceu".
+
+`CategoriasPieChart` desenha **no máximo 5 fatias nomeadas** e agrega o resto em "Outras":
+acima disso as vizinhas ficam com poucos graus, e a cor vem do cadastro — duas categorias
+finas de matiz parecido viram uma mancha. Pelo mesmo motivo a identidade de cada fatia é a
+**legenda com nome e valor**, nunca a cor sozinha: nada impede o lojista de cadastrar duas
+categorias da mesma cor. `test/painel_movimentacoes_golden_test.dart` trava o corte do
+realizado, a cauda agregada e a aritmética do acumulado.
+
 **Models** (`lib/models/`): json_serializable classes with generated `.g.dart` companions — never edit `.g.dart` by hand; rerun build_runner instead. `lib/models/cartao.dart` is hand-written, like `conta.dart` and `resumo_fluxo.dart`: shallow classes where json_serializable would only add a `.g.dart` to generate what fits in a few lines.
 
 **Responsiveness**: the app uses `responsive_framework` with breakpoints MOBILE (≤450), TABLET (≤800), DESKTOP (≤1920), 4K, plus helpers in `lib/utils/responsive_utils.dart`. Loading states use shimmer placeholders from `lib/widgets/shimmer_widgets.dart`; charts use `fl_chart` under `lib/widgets/charts/`.

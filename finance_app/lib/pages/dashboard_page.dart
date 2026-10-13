@@ -1,7 +1,9 @@
 import 'package:finance_app/models/boleto.dart';
 import 'package:finance_app/models/caixa.dart';
+import 'package:finance_app/models/categoria.dart';
 import 'package:finance_app/models/relatorio_mensal.dart';
 import 'package:finance_app/models/relatorio_semanal.dart';
+import 'package:finance_app/models/resumo_painel.dart';
 import 'package:finance_app/pages/caixa_page.dart';
 import 'package:finance_app/services/api_service.dart';
 import 'package:finance_app/services/global_state.dart';
@@ -10,6 +12,7 @@ import 'package:finance_app/utils/auth_actions.dart';
 import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:finance_app/widgets/boletos_widget.dart';
 import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
+import 'package:finance_app/widgets/resumo_movimentacoes_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -19,6 +22,19 @@ import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/responsive_utils.dart';
 
+/// O painel tem **dois resumos independentes**, e cada um aparece só se tiver
+/// assunto: o do caixa da loja e o das receitas e despesas.
+///
+/// Quem não usa o PDV não tem linha nenhuma em `finance_caixa`, e o bloco do
+/// caixa aparecia como um card "Nenhum caixa disponível" seguido de dois
+/// gráficos vazios — o painel abria afirmando que não havia nada, para uma loja
+/// que lança contas todo dia. Quem usa o PDV e não lança conta nenhuma tinha o
+/// problema espelhado.
+///
+/// O sinal de cada bloco é a ausência de dado, não uma configuração: `getCaixa`
+/// devolve `null` quando a loja nunca abriu caixa, e [ResumoPainel.vazio] diz
+/// que nunca houve lançamento. Ordem fixa quando os dois existem — caixa
+/// primeiro, movimentações depois.
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -28,12 +44,34 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final LoggerService _logger = LoggerService();
+  final ApiService _apiService = ApiService();
+
   Caixa? _caixa;
   RelatorioSemanal? _relatorioSemanal;
   List<RelatorioMensal> _relatoriosMensais = [];
   List<Boleto> _boletos = [];
+
+  ResumoPainel? _painel;
+  Map<int, Categoria> _categorias = {};
+
   bool _isLoading = true;
-  String? _error;
+
+  /// Falha de cada bloco, separada de propósito: a do caixa não pode apagar as
+  /// movimentações da tela, nem o contrário. O erro de tela inteira só aparece
+  /// quando os **dois** falharam — ver [_error].
+  Object? _erroCaixa;
+  Object? _erroMovimentacoes;
+
+  /// Nada carregou. É o único caso que troca o painel pela tela de erro.
+  String? get _error =>
+      (_erroCaixa != null && _erroMovimentacoes != null)
+          ? _erroCaixa.toString()
+          : null;
+
+  /// A loja tem caixa — e, com ele, faturamento e pedidos para comparar.
+  bool get _temCaixa => _caixa != null;
+
+  bool get _temMovimentacoes => _painel != null && !_painel!.vazio;
 
   @override
   void initState() {
@@ -44,19 +82,32 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
-      _error = null;
+      _erroCaixa = null;
+      _erroMovimentacoes = null;
     });
 
+    // Em paralelo: são três grupos independentes e o painel é a primeira tela
+    // depois do login. Em série, o tempo de abertura era a soma de todos.
+    await Future.wait([
+      _carregarCaixa(),
+      _carregarMovimentacoes(),
+      _carregarBoletos(),
+    ]);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _carregarCaixa() async {
     try {
-      final apiService = ApiService();
-      final caixa = await apiService.getCaixa();
-      final relatoriosSemana = await apiService.getRelatorioSemanal();
-      final relatoriosMensais = await apiService.getRelatorioMensal(
+      final caixa = await _apiService.getCaixa();
+      final relatoriosSemana = await _apiService.getRelatorioSemanal();
+      final relatoriosMensais = await _apiService.getRelatorioMensal(
         DateTime.now().year,
       );
 
-      // Busca o relatório do dia da semana atual
-      final diaSemana = DateTime.now().weekday; // 1 = Segunda, 7 = Domingo
+      // Relatório do dia da semana atual (1 = segunda, 7 = domingo).
+      final diaSemana = DateTime.now().weekday;
       RelatorioSemanal? relatorioSemanal;
 
       if (relatoriosSemana.isNotEmpty) {
@@ -66,38 +117,81 @@ class _DashboardPageState extends State<DashboardPage> {
         );
       }
 
-      // Busca boletos
-      List<Boleto> boletos = [];
+      if (!mounted) return;
+      setState(() {
+        _caixa = caixa;
+        _relatorioSemanal = relatorioSemanal;
+        _relatoriosMensais = relatoriosMensais;
+      });
+    } catch (e, s) {
+      await _logger.logError('DashboardPage._carregarCaixa', e, stackTrace: s);
+      if (!mounted) return;
+      setState(() => _erroCaixa = e);
+    }
+  }
+
+  /// O painel inteiro numa requisição, mais o mapa de categorias.
+  ///
+  /// As categorias vêm à parte porque o agrupamento da API devolve só
+  /// `id_categoria`: nome, cor e ícone saem daqui, e são os mesmos que as telas
+  /// de Receitas e Despesas usam.
+  Future<void> _carregarMovimentacoes() async {
+    try {
+      final painel = await _apiService.getResumoPainel();
+
+      // Categoria é acessório do painel: sem ela as fatias viram "Sem
+      // categoria" e a tela continua de pé. Falhar aqui não pode esconder os
+      // números.
+      Map<int, Categoria> categorias = {};
       try {
-        // Tenta obter o id_cliente do GlobalState
-        final idCliente = GlobalState().firstIdLoja;
-        if (idCliente != 0) {
-          boletos = await apiService.checkBoletos(idCliente);
-        }
+        final lista = await _apiService.listCategorias();
+        categorias = {
+          for (final c in lista)
+            if (c.id != null) c.id!: c,
+        };
       } catch (e, s) {
-        // Boleto é um bloco do painel, não o painel: a falha não interrompe o
-        // resto do carregamento, só sai no log.
-        debugPrint('Erro ao buscar boletos: $e');
+        debugPrint('Erro ao carregar categorias do painel: $e');
         await _logger.logError(
-          'DashboardPage._loadData.boletos',
+          'DashboardPage._carregarMovimentacoes.categorias',
           e,
           stackTrace: s,
         );
       }
 
+      if (!mounted) return;
       setState(() {
-        _caixa = caixa;
-        _relatorioSemanal = relatorioSemanal;
-        _relatoriosMensais = relatoriosMensais;
-        _boletos = boletos;
-        _isLoading = false;
+        _painel = painel;
+        _categorias = categorias;
       });
     } catch (e, s) {
-      await _logger.logError('DashboardPage._loadData', e, stackTrace: s);
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      await _logger.logError(
+        'DashboardPage._carregarMovimentacoes',
+        e,
+        stackTrace: s,
+      );
+      if (!mounted) return;
+      setState(() => _erroMovimentacoes = e);
+    }
+  }
+
+  /// Boleto é um bloco do painel, não o painel: a falha não interrompe o resto
+  /// do carregamento, só sai no log.
+  Future<void> _carregarBoletos() async {
+    try {
+      final idCliente = GlobalState().firstIdLoja;
+      if (idCliente == 0) return;
+
+      final boletos = await _apiService.checkBoletos(idCliente);
+
+      if (!mounted) return;
+      setState(() => _boletos = boletos);
+    } catch (e, s) {
+      debugPrint('Erro ao buscar boletos: $e');
+      await _logger.logError(
+        'DashboardPage._carregarBoletos',
+        e,
+        stackTrace: s,
+      );
     }
   }
 
@@ -143,20 +237,129 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: context.responsivePadding(),
-                  child: Column(
-                    children: [
-                      _buildMainCard(context),
-                      SizedBox(height: context.responsiveSpacing()),
-                      BoletosWidget(boletos: _boletos),
-                      if (_boletos.isNotEmpty)
-                        SizedBox(height: context.responsiveSpacing()),
-                      _buildActionCardsRow(context),
-                      SizedBox(height: context.responsiveSpacing()),
-                      MonthlyChartsWidget(relatorios: _relatoriosMensais),
-                    ],
-                  ),
+                  child: _buildConteudo(context),
                 ),
               ),
+    );
+  }
+
+  /// A ordem é a de sempre; o que mudou é que os pedaços do caixa agora são
+  /// condicionais.
+  ///
+  /// Os dois blocos do caixa não ficam contíguos, e isso é intencional: boletos
+  /// e atalhos continuam entre eles, exatamente onde estavam antes desta tela
+  /// ganhar o segundo resumo. Agrupá-los empurraria o aviso de boleto vencendo
+  /// para baixo de dois gráficos.
+  Widget _buildConteudo(BuildContext context) {
+    final espaco = context.responsiveSpacing();
+
+    return Column(
+      children: [
+        if (_caixa != null) ...[
+          _buildMainCard(context, _caixa!),
+          SizedBox(height: espaco),
+        ],
+        BoletosWidget(boletos: _boletos),
+        if (_boletos.isNotEmpty) SizedBox(height: espaco),
+        _buildActionCardsRow(context),
+        // Faturamento e pedidos saem do caixa: sem caixa eles seriam dois
+        // gráficos vazios.
+        if (_temCaixa && _relatoriosMensais.isNotEmpty) ...[
+          SizedBox(height: espaco),
+          MonthlyChartsWidget(relatorios: _relatoriosMensais),
+        ],
+        if (_temMovimentacoes) ...[
+          SizedBox(height: AppSpacing.xxl),
+          ResumoMovimentacoesWidget(
+            painel: _painel!,
+            categorias: _categorias,
+          ),
+        ],
+        // Um bloco que falhou avisa no lugar dele, em vez de sumir — sumir é o
+        // que o painel faz quando a loja de fato não tem o dado, e os dois
+        // casos não podem parecer iguais.
+        if (_erroCaixa != null) ...[
+          SizedBox(height: espaco),
+          _buildFalhaBloco('Não foi possível carregar o resumo do caixa.'),
+        ],
+        if (_erroMovimentacoes != null) ...[
+          SizedBox(height: espaco),
+          _buildFalhaBloco('Não foi possível carregar as movimentações.'),
+        ],
+        if (!_temCaixa && !_temMovimentacoes && _erroCaixa == null &&
+            _erroMovimentacoes == null) ...[
+          SizedBox(height: espaco),
+          _buildSemDados(context),
+        ],
+      ],
+    );
+  }
+
+  /// Estado vazio de verdade: a loja não tem caixa **nem** lançamento. Antes
+  /// disto a tela ficava com um card "Nenhum caixa disponível" e dois gráficos
+  /// em branco, que parecem falha de carregamento.
+  Widget _buildSemDados(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: AppElevation.none,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          children: [
+            Icon(
+              Icons.insights_outlined,
+              size: 40,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Nada para resumir ainda',
+              style: theme.textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Lance uma receita ou uma despesa e o resumo aparece aqui.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFalhaBloco(String mensagem) {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+
+    return Card(
+      elevation: AppElevation.none,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            Icon(Icons.cloud_off, size: 20, color: cores.warning),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(mensagem, style: theme.textTheme.bodySmall),
+            ),
+            TextButton(
+              onPressed: _loadData,
+              child: const Text('Tentar de novo'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -181,19 +384,11 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildMainCard(BuildContext context) {
-    final caixa = _caixa;
+  /// Recebe o caixa já resolvido: quem decide se o bloco existe é
+  /// [_temCaixa], e o card não precisa ter um estado "sem caixa" — era ele que
+  /// aparecia escrito "Nenhum caixa disponível" para quem nunca usou o PDV.
+  Widget _buildMainCard(BuildContext context, Caixa caixa) {
     final theme = Theme.of(context);
-
-    if (caixa == null) {
-      return const Card(
-        elevation: AppElevation.none,
-        child: Padding(
-          padding: EdgeInsets.all(AppSpacing.lg),
-          child: Text('Nenhum caixa disponível'),
-        ),
-      );
-    }
 
     final dataFechamento = caixa.dataFechamento ?? DateTime.now();
     final statusAberto = caixa.statusCaixa == 0;

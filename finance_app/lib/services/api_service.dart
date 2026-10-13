@@ -9,6 +9,7 @@ import '../models/caixa.dart';
 import '../models/relatorio_mensal.dart';
 import '../models/relatorio_semanal.dart';
 import '../models/resumo_fluxo.dart';
+import '../models/resumo_painel.dart';
 import '../models/boleto.dart';
 import 'api_config.dart';
 import 'global_state.dart';
@@ -228,6 +229,45 @@ class ApiService {
     } catch (e, stackTrace) {
       await _logger.logError(
         'ApiService.getResumoFluxo',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: params,
+      );
+      rethrow;
+    }
+  }
+
+  /// O painel de movimentações inteiro, numa requisição.
+  ///
+  /// [mes] é opcional: sem ele a API responde o mês corrente **dela**, e é isso
+  /// que se quer — o relógio do aparelho pode estar noutro dia, e o painel
+  /// mostraria um mês que não é o do servidor que somou os números.
+  Future<ResumoPainel> getResumoPainel({DateTime? mes}) async {
+    final idLoja = GlobalState().firstIdLoja;
+    final params = <String, String>{};
+    if (mes != null) {
+      params['mes'] =
+          '${mes.year.toString().padLeft(4, '0')}-'
+          '${mes.month.toString().padLeft(2, '0')}';
+    }
+
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/finance/fluxo/resumo/painel/$idLoja',
+      ).replace(queryParameters: params.isEmpty ? null : params);
+
+      final response = await _handleRequest(
+        () => http.get(uri),
+        'getResumoPainel',
+      );
+
+      if (response['success'] == true) {
+        return ResumoPainel.fromJson(response['data'] as Map<String, dynamic>);
+      }
+      throw Exception(response['msg'] ?? 'Erro ao carregar o painel.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getResumoPainel',
         e,
         stackTrace: stackTrace,
         additionalInfo: params,
