@@ -148,6 +148,28 @@ lançamentos e afirmaria uma posição que o clone não tem. O vencimento é **h
 `test/clone_fluxo_test.dart` trava os quatro campos, o sufixo (inclusive o colchete que faz
 parte do nome e tem de sobreviver) e a separação entre os modos.
 
+**"Salvar e continuar"** (`FluxoFormDialog._salvar(continuar:)`): três botões, na ordem
+`Cancelar · Salvar e continuar · Salvar`. O do meio grava e **mantém o modal aberto**,
+limpando só descrição e valor e devolvendo o cursor à descrição — é para quem lança as
+contas do mês de uma vez, na mesma categoria e com o mesmo vencimento. Não aparece em
+edição (editar é a operação de um registro); aparece em duplicar, que é criação. Depois da
+primeira gravação o "Cancelar" vira **"Fechar"**: o que foi gravado está gravado, e
+"Cancelar" ali sugeriria desfazer.
+
+Duas consequências que não se leem no botão. **Quem fecha o modal agora é ele mesmo**, e
+não mais o `onSave` da tela — o `Navigator.pop` saiu de `FluxosPage._showFormDialog`,
+porque só o modal sabe qual dos dois botões foi tocado; repor aquele `pop` faz o
+"continuar" fechar na primeira gravação. E a tela é avisada em **toda** gravação, inclusive
+com `continuar`: ela recarrega a lista atrás do modal, que com o modal aberto é a única
+confirmação visível de que o lançamento anterior entrou.
+
+Difere do gêmeo do cartão (`MovimentoCartaoFormDialog`, que teve o botão primeiro) num
+ponto: lá o parcelamento também é zerado a cada gravação, aqui a **repetição é mantida**.
+O seletor continua visível no corpo do formulário e quem lança doze contas mensais em
+sequência quer justamente mantê-lo — mas em "Mensal · 3 parcelas" cada gravação cria três
+linhas. `test/salvar_continuar_test.dart` trava a ordem e a presença dos botões em cada
+modo, e que uma gravação que falha **não** fecha o modal nem descarta o que foi digitado.
+
 **Cartão de crédito** (`lib/pages/cartoes_page.dart` + `lib/pages/cartao_movimentos_page.dart`):
 duas telas, e o que organiza as duas é uma frase — **compra no cartão não é saída de
 caixa**. O dinheiro sai quando a fatura é paga, e o que entra em `finance_fluxo_caixa` é só

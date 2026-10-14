@@ -76,6 +76,15 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   final _descricaoController = TextEditingController();
   final _valorController = TextEditingController();
   final _parcelasController = TextEditingController();
+
+  /// Para o "salvar e continuar" devolver o cursor à descrição: gravado o
+  /// lançamento, o próximo começa exatamente ali.
+  final _descricaoFocus = FocusNode();
+
+  /// Quantos lançamentos esta sessão do modal já gravou. É a confirmação do
+  /// "salvar e continuar" — o modal não fecha, e sem contagem o botão de
+  /// cancelar continuaria oferecendo desfazer o que já está gravado.
+  int _gravados = 0;
   final ApiService _apiService = ApiService();
   final LoggerService _logger = LoggerService();
   bool _isLoading = false;
@@ -133,6 +142,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     _descricaoController.dispose();
     _valorController.dispose();
     _parcelasController.dispose();
+    _descricaoFocus.dispose();
     super.dispose();
   }
 
@@ -255,9 +265,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   /// vincular, então a lista é vazia e o bloco inteiro some.
   List<Subcategoria> get _subcategoriasDaCategoria {
     if (_categoriaId == null || _categoriaId == 0) return const [];
-    return _subcategorias
-        .where((s) => s.idCategoria == _categoriaId)
-        .toList();
+    return _subcategorias.where((s) => s.idCategoria == _categoriaId).toList();
   }
 
   /// 0 quando não há subcategoria escolhida — ou quando a escolhida não é filha
@@ -285,7 +293,6 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     }
     return null;
   }
-
 
   /// Calcula a data de vencimento periódica considerando meses com dias diferentes
   DateTime _calcularDataVencimento(DateTime dataBase, int numeroParcela) {
@@ -408,9 +415,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Esta conta faz parte de um parcelamento.',
-                      ),
+                      const Text('Esta conta faz parte de um parcelamento.'),
                       const SizedBox(height: AppSpacing.sm),
                       CheckboxListTile(
                         value: replicar,
@@ -465,7 +470,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     );
   }
 
-  Future<void> _save() async {
+  /// Grava o lançamento. Com [continuar], mantém o modal aberto para o
+  /// próximo — ver [_buildAcoes] e [_limparParaProximo].
+  Future<void> _salvar({required bool continuar}) async {
     if (_formKey.currentState!.validate()) {
       // Validação da descrição
       if (_descricaoController.text.trim().length < 3) {
@@ -548,7 +555,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
               id: 0,
               idLoja: GlobalState().firstIdLoja,
               idCategoria: _categoriaId ?? 0,
-            idSubcategoria: _idSubcategoriaParaSalvar,
+              idSubcategoria: _idSubcategoriaParaSalvar,
               descricao: _descricaoController.text,
               valor: valorBase,
               tipoFluxo: tipoFluxoValue,
@@ -583,7 +590,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 id: 0,
                 idLoja: GlobalState().firstIdLoja,
                 idCategoria: _categoriaId ?? 0,
-            idSubcategoria: _idSubcategoriaParaSalvar,
+                idSubcategoria: _idSubcategoriaParaSalvar,
                 descricao: descricaoComParcela,
                 valor: valorParcela,
                 tipoFluxo: tipoFluxoValue,
@@ -601,9 +608,26 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           }
         }
 
+        if (!mounted) return;
+
+        _gravados++;
+
         // No parcelamento a primeira parcela vence nesta data, então é também
         // para este mês que a lista deve ir.
+        //
+        // A tela é avisada **em toda** gravação, inclusive com `continuar`: ela
+        // recarrega a lista atrás do modal, e com o modal aberto essa lista é a
+        // única confirmação visível de que o lançamento anterior entrou.
         widget.onSave(_dataVencimento ?? DateTime.now(), parcelasReplicadas);
+
+        if (!continuar) {
+          // Quem fecha o modal é ele mesmo, e não o `onSave` da tela: só aqui
+          // se sabe se era para fechar.
+          Navigator.of(context).pop();
+          return;
+        }
+
+        _limparParaProximo();
       } catch (e, s) {
         // No parcelamento o POST é um por parcela: saber em qual repetição
         // parou é a diferença entre "nada foi salvo" e "metade foi".
@@ -614,6 +638,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           additionalInfo: {
             'edicao': _ehEdicao,
             'clone': widget.clonar,
+            'continuar': continuar,
             'tipoFluxo': widget.tipoFluxo,
             'repeticao': _repeticao,
             'numeroParcelas': _numeroParcelas,
@@ -630,6 +655,75 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         }
       }
     }
+  }
+
+  /// Limpa só o que é único de cada lançamento: descrição e valor.
+  ///
+  /// Categoria, subcategoria, conta, vencimento, repetição e a confirmação
+  /// ficam — é o ponto do "salvar e continuar". Quem lança as contas do mês de
+  /// uma vez digita dez descrições e dez valores na **mesma** categoria, com o
+  /// mesmo vencimento, e repor esses campos a cada linha é o trabalho que o
+  /// botão existe para eliminar.
+  ///
+  /// Diferença consciente em relação ao gêmeo do cartão
+  /// (`MovimentoCartaoFormDialog._limparParaProximo`), que também zera o
+  /// parcelamento: aqui a repetição é um seletor que **continua visível** no
+  /// corpo do formulário, e quem lança doze contas mensais em sequência quer
+  /// justamente mantê-la. Vale olhar o seletor antes de salvar o próximo: em
+  /// "Mensal · 3 parcelas", cada gravação cria três linhas.
+  void _limparParaProximo() {
+    _descricaoController.clear();
+    _valorController.clear();
+
+    // O cursor volta para a descrição: é onde o próximo lançamento começa, e
+    // sem isso o foco fica no botão e o lojista toca a tela de novo a cada
+    // linha.
+    _descricaoFocus.requestFocus();
+  }
+
+  /// Cancelar, "Salvar e continuar" e Salvar — nesta ordem.
+  ///
+  /// "Salvar e continuar" fica à esquerda do Salvar e sem destaque: a ação
+  /// padrão continua sendo gravar e fechar. **Não aparece em edição**: editar é
+  /// por definição a operação de um registro, e "continuar" não teria o que
+  /// continuar. Em duplicar aparece, porque duplicar é criar.
+  ///
+  /// Mesma forma e mesmos rótulos do modal do cartão, de propósito: são dois
+  /// formulários gêmeos, e dois comportamentos para o mesmo botão seria o tipo
+  /// de diferença que ninguém lembra de qual é qual.
+  List<Widget> _buildAcoes() {
+    if (_isLoading) {
+      return [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: ResponsiveUtils.isMobile(context) ? 3.0 : 4.0,
+            ),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        // Depois de gravar com "continuar", não há o que cancelar — o que foi
+        // gravado está gravado, e "Cancelar" ali sugeriria desfazer.
+        child: Text(_gravados > 0 ? 'Fechar' : 'Cancelar'),
+      ),
+      if (!_ehEdicao)
+        TextButton(
+          onPressed: () => _salvar(continuar: true),
+          child: const Text('Salvar e continuar'),
+        ),
+      ElevatedButton(
+        onPressed: () => _salvar(continuar: false),
+        child: const Text('Salvar'),
+      ),
+    ];
   }
 
   Future<void> _selecionarData() async {
@@ -656,8 +750,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   Future<void> _abrirDialogNovaCategoria() async {
     final int? novaCategoriaId = await showDialog<int>(
       context: context,
-      builder:
-          (context) => CategoriaFormDialog(tipoFluxo: _tipoFluxoCategoria),
+      builder: (context) => CategoriaFormDialog(tipoFluxo: _tipoFluxoCategoria),
     );
 
     // `null` é cancelamento; 0 significa criada sem id conhecido — nos dois
@@ -723,6 +816,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
               children: [
                 TextFormField(
                   controller: _descricaoController,
+                  focusNode: _descricaoFocus,
                   decoration: const InputDecoration(
                     isDense: true,
                     labelText: 'Descrição',
@@ -799,17 +893,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        _isLoading
-            ? CircularProgressIndicator(
-              strokeWidth: ResponsiveUtils.isMobile(context) ? 3.0 : 4.0,
-            )
-            : ElevatedButton(onPressed: _save, child: const Text('Salvar')),
-      ],
+      actions: _buildAcoes(),
     );
   }
 
@@ -1040,11 +1124,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   /// lado, independente da largura que o conteúdo pede), sobrando ~232 para o
   /// cabeçalho — e os 18px da seta eram a diferença entre "Sem conta" inteiro e
   /// "Sem con…". A pílula com borda já lê como controle.
-  Widget _chip({
-    required Widget icone,
-    required String texto,
-    String? dica,
-  }) {
+  Widget _chip({required Widget icone, required String texto, String? dica}) {
     final theme = Theme.of(context);
 
     final conteudo = Container(
@@ -1096,10 +1176,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     return DropdownButtonFormField<String>(
       value: _repeticao,
       isDense: true,
-      decoration: const InputDecoration(
-        isDense: true,
-        labelText: 'Repetição',
-      ),
+      decoration: const InputDecoration(isDense: true, labelText: 'Repetição'),
       items: const [
         DropdownMenuItem(value: '1', child: Text('Única vez')),
         DropdownMenuItem(value: '2', child: Text('Diária')),

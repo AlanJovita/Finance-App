@@ -380,7 +380,11 @@ class _FluxosPageState extends State<FluxosPage> {
           fluxo: fluxo,
           clonar: clonar,
           onSave: (vencimento, parcelasReplicadas) {
-            Navigator.of(context).pop();
+            // Quem fecha o modal é ele mesmo: no "salvar e continuar" ele
+            // grava e **fica aberto** para o próximo lançamento, e só ele sabe
+            // qual dos dois botões foi tocado. Aqui a tela só se atualiza — o
+            // que, com o modal aberto, é a única confirmação visível de que o
+            // lançamento anterior entrou.
             _recarregarApos(vencimento);
             // O formulário fechava calado: sem confirmação, "não atualizou" e
             // "não gravou" ficavam indistinguíveis para quem está olhando.
