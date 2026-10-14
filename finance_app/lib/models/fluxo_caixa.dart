@@ -190,4 +190,64 @@ class FluxoCaixa {
   }
 
   Map<String, dynamic> toJson() => _$FluxoCaixaToJson(this);
+
+  /// Cópia pronta para nascer como lançamento **novo** — é o que o "Duplicar"
+  /// do card entrega ao `FluxoFormDialog`.
+  ///
+  /// Quatro campos não são herdados, e cada um por um motivo:
+  ///
+  /// - **`id` e `id_ref` zerados.** Sem isso não é uma cópia, é a mesma linha:
+  ///   o `id` mandaria a gravação para o `UPDATE` e o `id_ref` colaria o clone
+  ///   num parcelamento alheio — onde ele apareceria como parcela e seria
+  ///   alcançado pela replicação em grupo e pela exclusão do lote.
+  /// - **`confirmado` em falso.** Duplicar uma conta já paga não paga a nova;
+  ///   herdar a baixa registraria dinheiro que não se moveu, e o lojista
+  ///   confirma depois, pelo botão do card.
+  /// - **`repeticao` em "única vez"**, junto com o sufixo `[3/12]` fora da
+  ///   descrição. Clonar *uma parcela* não é clonar o lote: o formulário
+  ///   libera a repetição para quem quiser parcelar de novo, mas em 1 o gesto
+  ///   gera um lançamento, não doze.
+  ///
+  /// O vencimento é **hoje**, não o do original: o uso real é "isto outra
+  /// vez", e copiar a data faria o clone de uma conta de agosto nascer
+  /// atrasado, em vermelho, esperando que alguém trocasse a data toda vez. A
+  /// data continua a um toque no chip do cabeçalho do modal. Lançamento sem
+  /// vencimento também recebe hoje — o formulário não sabe gravar "sem data"
+  /// de qualquer forma.
+  ///
+  /// [hoje] é injetável para o teste não depender do calendário da máquina.
+  FluxoCaixa paraClone({DateTime? hoje}) {
+    final agora = hoje ?? DateTime.now();
+    final vencimento = DateTime(agora.year, agora.month, agora.day);
+
+    return FluxoCaixa(
+      id: 0,
+      idLoja: idLoja,
+      idCategoria: idCategoria,
+      idSubcategoria: idSubcategoria,
+      descricao: semSufixoParcela(descricao),
+      valor: valor,
+      tipoFluxo: tipoFluxo,
+      cancelado: false,
+      confirmado: false,
+      dataCriacao: vencimento,
+      dataVencimento: vencimento,
+      diaVencimento: vencimento.day,
+      repeticao: '1',
+      idRef: 0,
+      idConta: idConta,
+    );
+  }
+
+  /// Tira o `[3/12]` do fim da descrição, se houver.
+  ///
+  /// O sufixo é escrito pelo `FluxoFormDialog` ao criar um parcelamento, uma
+  /// parcela por POST, e identifica a posição da linha dentro do lote. Num
+  /// clone ele seria uma afirmação falsa: o lançamento novo não é a terceira
+  /// parcela de nada.
+  static String? semSufixoParcela(String? descricao) {
+    if (descricao == null) return null;
+
+    return descricao.replaceFirst(RegExp(r'\s*\[\d+/\d+\]\s*$'), '').trim();
+  }
 }

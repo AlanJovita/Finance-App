@@ -19,9 +19,32 @@ import 'logo_banco.dart';
 import 'seletor_categoria.dart';
 import 'subcategoria_form_dialog.dart';
 
+/// O formulário de lançamento do caixa, nos seus **três** modos.
+///
+/// O que distingue os três é só o par ([fluxo], [clonar]):
+///
+/// | modo      | fluxo | clonar | grava                      |
+/// |-----------|-------|--------|----------------------------|
+/// | novo      | null  | false  | POST (N, se parcelado)     |
+/// | edição    | !null | false  | PUT, com replicação opcional |
+/// | duplicar  | !null | true   | POST, como qualquer novo   |
+///
+/// O clone é pré-preenchido como uma edição e gravado como um lançamento novo —
+/// por isso ele não pode entrar em nenhum caminho que trate [fluxo] como "a
+/// linha que já existe no banco". Quem responde isso é [_ehEdicao], e não
+/// `fluxo != null`: a diferença é o que impede o duplicar de virar um UPDATE
+/// silencioso do original, ou de oferecer a replicação para as parcelas de um
+/// lote ao qual o clone não pertence.
 class FluxoFormDialog extends StatefulWidget {
   final String tipoFluxo;
+
+  /// O lançamento em foco: a linha sendo editada, ou o molde do clone
+  /// (`FluxoCaixa.paraClone()`, que já zerou `id`, `id_ref`, a baixa e o
+  /// parcelamento).
   final FluxoCaixa? fluxo;
+
+  /// `true` faz o formulário abrir preenchido e ainda assim **criar**.
+  final bool clonar;
 
   /// Chamado depois de gravar, com a data de vencimento efetivamente salva.
   ///
@@ -40,6 +63,7 @@ class FluxoFormDialog extends StatefulWidget {
     super.key,
     required this.tipoFluxo,
     this.fluxo,
+    this.clonar = false,
     required this.onSave,
   });
 
@@ -114,6 +138,23 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
   /// 1 = receita, 2 = despesa — o mesmo código de `tipo_fluxo` do banco.
   int get _tipoFluxoCategoria => widget.tipoFluxo == 'receita' ? 1 : 2;
+
+  /// Está editando a linha que veio, ou criando outra?
+  ///
+  /// Duplicar recebe um `fluxo` e **não** é edição: todo caminho que trata o
+  /// `fluxo` como linha existente (o `UPDATE`, o `id_ref` do lote, a pergunta
+  /// de replicar, a repetição travada) pergunta por aqui.
+  bool get _ehEdicao => widget.fluxo != null && !widget.clonar;
+
+  /// "Nova", "Editar" ou "Duplicar", no título do modal.
+  ///
+  /// O clone precisa de rótulo próprio: aberto com todos os campos de um
+  /// lançamento que já existe, "Editar" faria o lojista acreditar que está
+  /// mexendo naquele — e "Nova" não explicaria de onde vieram os valores.
+  String get _acaoTitulo {
+    if (widget.clonar) return 'Duplicar';
+    return widget.fluxo == null ? 'Nova' : 'Editar';
+  }
 
   Future<void> _loadCategorias() async {
     try {
@@ -308,7 +349,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   /// não oferecer a replicação quando foi *só* a data que mudou é o que evita
   /// perguntar algo que não teria efeito nenhum.
   List<String> _camposAlterados(double valor) {
-    final original = widget.fluxo;
+    // `_ehEdicao`, e não `fluxo != null`: o clone chega aqui com um molde
+    // preenchido e nada a replicar — comparar com ele diria que "tudo mudou".
+    final original = _ehEdicao ? widget.fluxo : null;
     if (original == null) return const [];
 
     final campos = <String>[];
@@ -446,7 +489,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       // A pergunta vem antes do spinner: ela é parte da decisão de salvar, e
       // cancelar aqui tem que deixar o formulário como estava.
       final camposParaReplicar =
-          (widget.fluxo?.idRef ?? 0) > 0
+          _ehEdicao && (widget.fluxo?.idRef ?? 0) > 0
               ? _camposAlterados(valorBase)
               : const <String>[];
 
@@ -465,8 +508,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       var parcelasReplicadas = 0;
 
       try {
-        // Se for edição simples
-        if (widget.fluxo != null) {
+        // Se for edição simples. O clone cai no `else`, com os lançamentos
+        // novos: é lá que o `id` vai em 0 e o POST acontece.
+        if (_ehEdicao) {
           final fluxo = FluxoCaixa(
             id: widget.fluxo!.id,
             idLoja: GlobalState().firstIdLoja,
@@ -568,7 +612,8 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
           e,
           stackTrace: s,
           additionalInfo: {
-            'edicao': widget.fluxo != null,
+            'edicao': _ehEdicao,
+            'clone': widget.clonar,
             'tipoFluxo': widget.tipoFluxo,
             'repeticao': _repeticao,
             'numeroParcelas': _numeroParcelas,
@@ -734,7 +779,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
                 _buildRepeticao(),
                 const SizedBox(height: AppSpacing.md),
 
-                if (_repeticao != '1' && widget.fluxo == null)
+                if (_repeticao != '1' && !_ehEdicao)
                   ..._buildCamposParcelamento(),
 
                 SwitchListTile(
@@ -879,7 +924,7 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       runSpacing: AppSpacing.sm,
       children: [
         Text(
-          '${widget.fluxo == null ? 'Nova' : 'Editar'} '
+          '$_acaoTitulo '
           '${widget.tipoFluxo == 'receita' ? 'Receita' : 'Despesa'}',
           style: theme.textTheme.titleLarge,
         ),
@@ -1063,7 +1108,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         DropdownMenuItem(value: '5', child: Text('Anual')),
       ],
       onChanged:
-          widget.fluxo != null
+          // Travada na edição (a repetição é do lote, não desta linha) e
+          // liberada no clone, que é um lançamento novo como qualquer outro.
+          _ehEdicao
               ? null
               : (value) {
                 if (value != null) {

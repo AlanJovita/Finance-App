@@ -131,6 +131,23 @@ API os recusa, e não oferecer a replicação quando foi *só* a data que mudou 
 algo que não teria efeito. O modal pergunta no momento de salvar, antes do spinner, e
 `null` do `_perguntarReplicar` é "cancelei a edição", diferente de `false`.
 
+**Duplicar lançamento** (`FluxoCaixa.paraClone` + o `clonar` do `FluxoFormDialog`): o
+modal tem **três** modos, e o par `(fluxo, clonar)` é o que os distingue — `null/false`
+cria, `!null/false` edita, `!null/true` abre preenchido e **cria**. Quem responde isso é
+`_ehEdicao`, nunca `fluxo != null`: era essa pergunta que decidia o `UPDATE`, o `id_ref`
+do lote, a oferta de replicação e a repetição travada, e o clone não pode entrar em
+nenhuma delas — sob pena de o "Duplicar" sobrescrever o original em silêncio.
+
+**O molde é montado no model, não no modal** (`paraClone`), e quatro campos não são
+herdados: `id` e `id_ref` zerados (com eles não é cópia, é a mesma linha — e o `id_ref`
+colaria o clone num parcelamento alheio, onde a replicação em grupo e a exclusão do lote o
+alcançariam), `confirmado` em falso (duplicar uma conta paga não paga a nova) e `repeticao`
+em "única vez", junto com o `[3/12]` fora da descrição — clonar *uma parcela* geraria doze
+lançamentos e afirmaria uma posição que o clone não tem. O vencimento é **hoje**: o uso é
+"isto outra vez", e copiar a data faria o clone de uma conta de agosto nascer atrasado.
+`test/clone_fluxo_test.dart` trava os quatro campos, o sufixo (inclusive o colchete que faz
+parte do nome e tem de sobreviver) e a separação entre os modos.
+
 **Cartão de crédito** (`lib/pages/cartoes_page.dart` + `lib/pages/cartao_movimentos_page.dart`):
 duas telas, e o que organiza as duas é uma frase — **compra no cartão não é saída de
 caixa**. O dinheiro sai quando a fatura é paga, e o que entra em `finance_fluxo_caixa` é só

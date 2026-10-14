@@ -31,6 +31,11 @@ class CardFluxo extends StatelessWidget {
   final String rotuloAcao;
 
   final VoidCallback onEditar;
+
+  /// Abre o formulário preenchido com este lançamento para gravar **outro**.
+  /// Ver `FluxoCaixa.paraClone`, que decide o que o clone não herda.
+  final VoidCallback onDuplicar;
+
   final VoidCallback onBaixar;
   final VoidCallback onEstornar;
   final VoidCallback onExcluir;
@@ -47,6 +52,7 @@ class CardFluxo extends StatelessWidget {
     required this.corValor,
     required this.rotuloAcao,
     required this.onEditar,
+    required this.onDuplicar,
     required this.onBaixar,
     required this.onEstornar,
     required this.onExcluir,
@@ -303,6 +309,8 @@ class CardFluxo extends StatelessWidget {
       onSelected: (value) {
         if (value == 'edit') {
           onEditar();
+        } else if (value == 'clone') {
+          onDuplicar();
         } else if (value == 'delete') {
           onExcluir();
         }
@@ -316,6 +324,18 @@ class CardFluxo extends StatelessWidget {
                   Icon(Icons.edit, size: 20, color: cores.info),
                   const SizedBox(width: AppSpacing.md),
                   const Text('Editar'),
+                ],
+              ),
+            ),
+            // Entre editar e excluir de propósito: é a vizinha de editar (abre
+            // o mesmo formulário) e tem de ficar longe da ação destrutiva.
+            PopupMenuItem(
+              value: 'clone',
+              child: Row(
+                children: [
+                  Icon(Icons.copy, size: 20, color: cores.info),
+                  const SizedBox(width: AppSpacing.md),
+                  const Text('Duplicar'),
                 ],
               ),
             ),

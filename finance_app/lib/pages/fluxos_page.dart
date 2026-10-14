@@ -365,13 +365,20 @@ class _FluxosPageState extends State<FluxosPage> {
 
   // --------------------------------------------------------------- ações
 
-  void _showFormDialog({FluxoCaixa? fluxo}) {
+  /// Abre o formulário: sem [fluxo] para criar, com ele para editar, e com
+  /// [clonar] para criar a partir de um molde já preenchido.
+  void _showFormDialog({FluxoCaixa? fluxo, bool clonar = false}) {
+    // O clone grava um lançamento novo: para a mensagem e para o recarregar, o
+    // que importa é que **não** é edição.
+    final ehEdicao = fluxo != null && !clonar;
+
     showDialog(
       context: context,
       builder: (context) {
         return FluxoFormDialog(
           tipoFluxo: _tipo.tipoDialogo,
           fluxo: fluxo,
+          clonar: clonar,
           onSave: (vencimento, parcelasReplicadas) {
             Navigator.of(context).pop();
             _recarregarApos(vencimento);
@@ -384,9 +391,10 @@ class _FluxosPageState extends State<FluxosPage> {
             ScaffoldMessenger.of(this.context).showSnackBar(
               SnackBar(
                 content: Text(
-                  fluxo == null
+                  !ehEdicao
                       ? '${_tipo.singular[0].toUpperCase()}'
-                          '${_tipo.singular.substring(1)} criada.'
+                          '${_tipo.singular.substring(1)} '
+                          '${clonar ? 'duplicada' : 'criada'}.'
                       : parcelasReplicadas > 0
                       ? 'Alterações salvas e replicadas para '
                           '$parcelasReplicadas '
@@ -1112,6 +1120,11 @@ class _FluxosPageState extends State<FluxosPage> {
       corValor: _tipo.cor(context.appColors),
       rotuloAcao: _tipo.rotuloAcao,
       onEditar: () => _showFormDialog(fluxo: fluxo),
+      // O molde do clone é montado aqui, e não dentro do modal: é o model que
+      // decide o que não se herda (`FluxoCaixa.paraClone`), e o formulário só
+      // precisa saber que vai criar.
+      onDuplicar:
+          () => _showFormDialog(fluxo: fluxo.paraClone(), clonar: true),
       onBaixar: () => _darBaixa(fluxo),
       onEstornar: () => _estornar(fluxo),
       onExcluir: () => _confirmarExclusao(fluxo),
