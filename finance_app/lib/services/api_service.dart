@@ -127,33 +127,13 @@ class ApiService {
   }
 
   // Endpoints de Fluxo de Caixa
-  Future<FluxoCaixa> getFluxo(int id) async {
-    try {
-      final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/finance/fluxo/$id')),
-        'getFluxo',
-      );
-      if (response['success'] == true) {
-        // A API retorna data como lista (mesmo para busca por id)
-        final data = response['data'];
-        final item = data is List ? (data.isEmpty ? null : data.first) : data;
-        if (item == null) {
-          throw Exception('Fluxo não encontrado.');
-        }
-        return FluxoCaixa.fromJson(item as Map<String, dynamic>);
-      } else {
-        throw Exception(response['msg'] ?? 'Erro ao buscar fluxo.');
-      }
-    } catch (e, stackTrace) {
-      await _logger.logError(
-        'ApiService.getFluxo',
-        e,
-        stackTrace: stackTrace,
-        additionalInfo: {'id': id},
-      );
-      rethrow;
-    }
-  }
+  //
+  // `getFluxo(id)` e `getCategoria(id)` moravam aqui e foram removidos: nenhuma
+  // tela os chamava, e as rotas `GET /fluxo/<id>` e `GET /categoria/<id>` que
+  // eles usavam não levavam `id_cliente` — entregavam o registro de qualquer
+  // loja a quem acertasse o id. Hoje a API exige o cliente na URL
+  // (`/fluxo/<id>/<id_cliente>`); quem precisar de um registro avulso escreve o
+  // método nessa forma.
 
   /// Total por mês, somado no banco.
   ///
@@ -443,28 +423,6 @@ class ApiService {
   }
 
   // Endpoints de Categoria
-  Future<Categoria> getCategoria(int id) async {
-    try {
-      final response = await _handleRequest(
-        () => http.get(Uri.parse('$_baseUrl/finance/categoria/$id')),
-        'getCategoria',
-      );
-      if (response['success'] == true) {
-        return Categoria.fromJson(response['data']);
-      } else {
-        throw Exception(response['msg'] ?? 'Erro ao buscar categoria.');
-      }
-    } catch (e, stackTrace) {
-      await _logger.logError(
-        'ApiService.getCategoria',
-        e,
-        stackTrace: stackTrace,
-        additionalInfo: {'id': id},
-      );
-      rethrow;
-    }
-  }
-
   Future<List<Categoria>> listCategorias() async {
     try {
       final idLoja = _idCliente;
