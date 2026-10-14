@@ -28,9 +28,9 @@ dart run flutter_launcher_icons
 ## Architecture
 
 **State management** is Provider-based, wired in `lib/main.dart`:
-- `AuthProvider` — login state; persists user + `idLojas` (store IDs) in SharedPreferences when "remember me" or token login is used.
+- `AuthProvider` — login state; persiste user + `idLojas` (store IDs) pelo `SessaoStore`, que escolhe o destino conforme o "lembrar login" (ver a seção de sessão adiante). Expõe `sessaoCarregando` e `sessaoValida`, e é por eles que a UI decide — não por `isAuthenticated` sozinho.
 - `ThemeProvider` — light/dark theme (themes defined in `lib/utils/app_theme.dart`).
-- `GlobalState` (`lib/services/global_state.dart`) — a plain singleton (not a Provider) holding the logged-in `idLojas`; `ApiService` reads `GlobalState().firstIdLoja` to scope API calls. AuthProvider must keep it in sync on login/logout.
+- `GlobalState` (`lib/services/global_state.dart`) — a plain singleton (not a Provider) holding the logged-in `idLojas`; `ApiService` escopa as chamadas por `exigirIdCliente()`, que **lança** em vez de devolver 0. AuthProvider mantém o singleton em sincronia num ponto único (`_aplicarSessao`).
 
 **API layer**: `lib/services/api_service.dart` is the single HTTP client, pointed at `http://api.premiosistemas.com.br`. There is no dependency injection — pages and dialogs instantiate `ApiService()` directly. All endpoints return an envelope `{ success, data, msg }`; `_handleRequest` centralizes decoding and error logging (including detecting HTML-instead-of-JSON responses from unimplemented endpoints).
 
@@ -40,7 +40,70 @@ Every log line carries `id_software = 10` (`idSoftwareFinance`) and `versao = ve
 
 The finance-api sends to the same place, via `Util/log_api.py` there. Deserialization (`fromJson`) deliberately does **not** log remotely: it runs once per item, so a malformed list would emit one line per record — `ApiService` already logs the whole request once, with endpoint and body.
 
-**Routing and token login** (`lib/main.dart`): named routes exist for `/login`, `/dashboard`, `/caixas`, `/contas`, `/cartoes`, `/receitas`, `/despesas`. Any *other* non-root path is treated as a login token: `onGenerateRoute` hands it to `TokenLoginWrapper`, which decodes it via `TokenService` (URL-safe Base64 of a CNPJ, padding stripped) and calls `AuthProvider.loginByToken`. Keep this in mind when adding routes — a new named route must be added to the known-routes check in `onGenerateRoute` **and** to the `routes` map, or it will be interpreted as a token.
+**Routing and token login** (`lib/main.dart`): named routes exist for `/login`, `/dashboard`, `/caixas`, `/contas`, `/cartoes`, `/receitas`, `/despesas`. Any *other* non-root path is treated as a login token: `onGenerateRoute` hands it to `TokenLoginWrapper`, which decodes it via `TokenService` (URL-safe Base64 of a CNPJ, padding stripped) and calls `AuthProvider.loginByToken`. Keep this in mind when adding routes — a new named route must be added to the known-routes check in `onGenerateRoute`, to the `routes` map, **and embrulhada na `GuardaSessao`** (seção seguinte), ou ela será interpretada como token — ou, pior, abrirá sem sessão.
+
+**Sessão: `id_cliente` nunca pode ser 0** (`lib/widgets/guarda_sessao.dart`,
+`lib/services/sessao_store.dart`, `lib/services/global_state.dart`).
+
+O que aconteceu: em web a rota em foco vai para a URL do navegador. Quem saiu do
+app pelo botão "voltar" e retornou pelo "avançar" **recarregou o Flutter direto
+na rota interna** (`/receitas`), e o `AuthWrapper` — que é só a rota raiz —
+nunca foi consultado. A tela montou com a sessão vazia, o então
+`GlobalState.firstIdLoja` respondeu 0 porque `idLojas` estava vazia, e os ~35
+chamadores usaram esse 0 sem conferir: as listas vieram do "cliente 0" (dados de
+outra origem, contas da loja real ausentes) e o lançamento feito ali foi gravado
+com `id_cliente = 0` — linha que nenhuma consulta da loja alcança mais, porque
+todas são escopadas por cliente.
+
+São **três** barreiras, e nenhuma substitui a outra:
+
+1. **`GuardaSessao` embrulha toda rota interna** no `routes` do `main.dart`.
+   Ela tem três respostas, não duas: *carregando* (espera), *sem sessão* (volta
+   ao login com aviso), *válida* (monta a tela). A espera é o que impede a tela
+   de montar no frame anterior à sessão chegar do disco — `AuthProvider`
+   expõe `sessaoCarregando` justamente para isso, e o `AuthWrapper` também o
+   respeita (de graça, parou de piscar o login em quem usa "lembrar login").
+   O aviso só sai quando a guarda **nunca** viu sessão válida nesta tela: quem
+   clicou em "Sair" pediu para sair e não precisa ser avisado de nada.
+2. **`sessaoValida` = autenticado **e** com loja.** `isAuthenticated` sozinho já
+   foi `true` com a lista de lojas vazia; o setter de `GlobalState.idLojas` e o
+   `SessaoStore.lojasValidas` descartam 0, negativo e repetido, nas três
+   entradas (formulário, link, sessão gravada). Login com credencial certa e
+   nenhuma loja utilizável agora falha com mensagem própria (`erroLogin`), em
+   vez de autenticar ninguém no cliente 0.
+3. **`ApiService` recusa montar requisição sem sessão.** `_idCliente` lança
+   `SessaoInvalidaException` em vez de devolver 0 (é o que os 27 pontos de
+   leitura usam), e `_comCliente` **sobrescreve** `id_cliente`/`id_loja` do
+   corpo de toda escrita com o id da sessão — um model montado antes da sessão
+   carregar chegava lá com 0. `GlobalState.firstIdLoja` continua podendo
+   responder 0 **só** para o `LoggerService`: erro ocorrido sem sessão ainda tem
+   de ser registrado.
+
+**A sessão tem dois destinos, e o "lembrar login" escolhe qual**
+(`SessaoStore`): marcado grava no `SharedPreferences` (`localStorage` na web),
+que é o que a opção promete; desmarcado grava no `ArmazenamentoVolatil` — o
+`sessionStorage` na web, um mapa em memória no resto. Não é conforto gratuito:
+sem o volátil, um F5 (ou o voltar/avançar) derrubava quem não marcou a opção
+para dentro de uma tela interna sem `id_cliente`. A leitura tenta o volátil
+primeiro, porque ele é sempre a sessão mais recente. Chave corrompida ou com id
+0 é recusada **e apagada** — senão a mesma chave reabriria o app sem sessão
+todas as vezes. Credencial nunca entra em nenhum dos dois (nem senha, nem o
+token do link).
+
+**O menu lateral preserva a raiz**: `AppDrawer` navega com
+`pushNamedAndRemoveUntil(rota, (r) => r.isFirst)`. Com o `pushReplacementNamed`
+que havia ali, a primeira navegação pelo menu substituía o próprio
+`AuthWrapper`, e aí o `popUntil(isFirst)` de quem volta ao login
+(`utils/auth_actions.dart` e a própria `GuardaSessao`) caía na tela interna em
+vez da tela de login.
+
+`test/sessao_test.dart` trava o conjunto: a rota interna aberta por
+recarregamento não monta nem por um frame, a sessão lembrada monta a tela com a
+loja (e nunca com 0), a sessão da aba sobrevive a um `AuthProvider` novo, o
+`ApiService` recusa leitura e escrita sem sessão, e sair pelo menu não acusa
+sessão encerrada. Do outro lado, a finance-api passou a recusar `id_cliente = 0`
+na URL e nas escritas (ver o CLAUDE.md dela) — as rotas do financeiro não
+autenticam nada, então as duas pontas precisam da guarda.
 
 **Conta bancária** (`lib/pages/contas_page.dart`): three things there are not inferable from the code.
 

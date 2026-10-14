@@ -11,6 +11,7 @@ import 'pages/cartoes_page.dart';
 import 'pages/contas_page.dart';
 import 'pages/fluxos_page.dart';
 import 'utils/app_theme.dart';
+import 'widgets/guarda_sessao.dart';
 
 void main() {
   runApp(const MyApp());
@@ -86,14 +87,45 @@ class MyApp extends StatelessWidget {
             },
             initialRoute: '/', // Rota inicial
             home: const AuthWrapper(),
+            // Toda rota interna entra pela `GuardaSessao`. Não é redundância
+            // com o `AuthWrapper`: o wrapper é só a raiz, e em web o navegador
+            // recarrega o app **na rota em foco** (é o que o voltar/avançar
+            // faz), montando a tela direto daqui, sem sessão nenhuma. Ver
+            // `widgets/guarda_sessao.dart`.
+            //
+            // Rota nova no mapa precisa vir embrulhada igual — e, como diz a
+            // nota do `onGenerateRoute` acima, entrar também na lista de rotas
+            // conhecidas de lá.
             routes: {
               '/login': (context) => const LoginPage(),
-              '/dashboard': (context) => const DashboardPage(),
-              '/caixas': (context) => const ListaCaixasPage(),
-              '/contas': (context) => const ContasPage(),
-              '/cartoes': (context) => const CartoesPage(),
-              '/receitas': (context) => const FluxosPage(tipo: TipoFluxo.receita),
-              '/despesas': (context) => const FluxosPage(tipo: TipoFluxo.despesa),
+              '/dashboard':
+                  (context) => const GuardaSessao(
+                    rota: '/dashboard',
+                    child: DashboardPage(),
+                  ),
+              '/caixas':
+                  (context) => const GuardaSessao(
+                    rota: '/caixas',
+                    child: ListaCaixasPage(),
+                  ),
+              '/contas':
+                  (context) =>
+                      const GuardaSessao(rota: '/contas', child: ContasPage()),
+              '/cartoes':
+                  (context) => const GuardaSessao(
+                    rota: '/cartoes',
+                    child: CartoesPage(),
+                  ),
+              '/receitas':
+                  (context) => const GuardaSessao(
+                    rota: '/receitas',
+                    child: FluxosPage(tipo: TipoFluxo.receita),
+                  ),
+              '/despesas':
+                  (context) => const GuardaSessao(
+                    rota: '/despesas',
+                    child: FluxosPage(tipo: TipoFluxo.despesa),
+                  ),
             },
           );
         },
@@ -102,6 +134,15 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// A rota raiz: decide entre login e painel.
+///
+/// Decide por `sessaoValida`, e não por `isAuthenticated`: autenticado com a
+/// lista de lojas vazia é o estado em que o app operava no cliente 0, e aqui
+/// ele tem de parecer o que é — ninguém logado.
+///
+/// Enquanto a sessão gravada está sendo lida mostra a espera, em vez da tela de
+/// login. A leitura é assíncrona; devolver "login" por default fazia a tela
+/// piscar em toda abertura de quem marcou "lembrar login".
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -109,7 +150,9 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
-        return auth.isAuthenticated ? const DashboardPage() : const LoginPage();
+        if (auth.sessaoCarregando) return const EsperaSessao();
+
+        return auth.sessaoValida ? const DashboardPage() : const LoginPage();
       },
     );
   }

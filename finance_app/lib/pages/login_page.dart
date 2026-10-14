@@ -105,11 +105,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Row(
+              content: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.white),
-                  SizedBox(width: AppSpacing.md),
-                  Expanded(child: Text('Usuário ou senha inválidos.')),
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: AppSpacing.md),
+                  // `erroLogin` só vem preenchido quando há algo melhor a dizer
+                  // do que "inválidos" — hoje, a credencial certa de um usuário
+                  // sem loja vinculada. Esse caso autenticava e deixava o app
+                  // operando no cliente 0; agora ele falha, e falar "senha
+                  // inválida" mandaria o lojista tentar de novo para sempre.
+                  Expanded(
+                    child: Text(
+                      authProvider.erroLogin ?? 'Usuário ou senha inválidos.',
+                    ),
+                  ),
                 ],
               ),
               backgroundColor: context.appColors.error,

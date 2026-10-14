@@ -272,7 +272,17 @@ class AppDrawer extends StatelessWidget {
         onTap: () {
           if (currentRoute != route) {
             Navigator.pop(context);
-            Navigator.pushReplacementNamed(context, route);
+            // Troca a tela em foco **preservando a raiz**, que é o
+            // `AuthWrapper`. Com `pushReplacementNamed` a primeira navegação
+            // pelo menu substituía a própria raiz: a pilha ficava com a tela
+            // interna no lugar do wrapper, e aí o `popUntil(isFirst)` de quem
+            // volta ao login (`auth_actions.dart`, `GuardaSessao`) caía na
+            // própria tela interna em vez da tela de login.
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              route,
+              (rota) => rota.isFirst,
+            );
           } else {
             Navigator.pop(context);
           }

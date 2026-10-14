@@ -21,6 +21,39 @@ class ApiService {
   final String _baseUrl = financeApiBaseUrl;
   final _logger = LoggerService();
 
+  /// O `id_cliente` da sessão — ou [SessaoInvalidaException], nunca 0.
+  ///
+  /// É a última barreira do app, e a única que não depende de a tela certa ter
+  /// sido desenhada. `GlobalState.firstIdLoja` devolvia 0 com a sessão vazia e
+  /// todos os métodos daqui o aceitavam: `GET /fluxo/list/0` responde com os
+  /// dados do "cliente 0" em vez de erro, e foi assim que a tela apareceu com
+  /// lançamentos de outra origem e sem as contas da loja.
+  ///
+  /// As rotas do financeiro não autenticam nada (ver o CLAUDE.md da
+  /// finance-api): o id vem da URL ou do corpo, então quem tem de garantir que
+  /// ele é de alguém é este lado.
+  int get _idCliente => GlobalState().exigirIdCliente();
+
+  /// Corpo de escrita com o `id_cliente` da sessão, aconteça o que acontecer.
+  ///
+  /// Toda tela monta o model com `GlobalState().firstIdLoja`; um model montado
+  /// antes de a sessão carregar — ou herdado de uma resposta antiga — chegava
+  /// aqui com 0 e a API gravava a linha no cliente 0, que é o lançamento
+  /// perdido que originou esta guarda. A chave é **sobrescrita**, não só
+  /// conferida: o app opera uma loja por vez, e a da sessão é a única certa.
+  ///
+  /// Os dois nomes existem porque os models não concordam: `id_cliente` é o da
+  /// API, `id_loja` é o legado aceito na entrada (ver `Model/fluxo_caixa.py`
+  /// lá). Só a chave que o model já manda é tocada — inventar a outra mudaria o
+  /// corpo que a API recebe.
+  Map<String, dynamic> _comCliente(Map<String, dynamic> corpo) {
+    final id = _idCliente;
+    for (final chave in const ['id_cliente', 'id_loja']) {
+      if (corpo.containsKey(chave)) corpo[chave] = id;
+    }
+    return corpo;
+  }
+
   Future<Map<String, dynamic>> _handleRequest(
     Future<http.Response> Function() request,
     String endpoint,
@@ -132,7 +165,7 @@ class ApiService {
     DateTime? de,
     DateTime? ate,
   }) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{'tipo': '$tipo'};
     if (de != null) params['de'] = _data(de);
     if (ate != null) params['ate'] = _data(ate);
@@ -171,7 +204,7 @@ class ApiService {
     int pagina = 1,
     int porPagina = 100,
   }) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{
       'tipo': '$tipo',
       'pagina': '$pagina',
@@ -207,7 +240,7 @@ class ApiService {
 
   /// Receitas, despesas e saldo do período — previsto e realizado.
   Future<ResumoFluxo> getResumoFluxo({DateTime? de, DateTime? ate}) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{};
     if (de != null) params['de'] = _data(de);
     if (ate != null) params['ate'] = _data(ate);
@@ -243,7 +276,7 @@ class ApiService {
   /// que se quer — o relógio do aparelho pode estar noutro dia, e o painel
   /// mostraria um mês que não é o do servidor que somou os números.
   Future<ResumoPainel> getResumoPainel({DateTime? mes}) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{};
     if (mes != null) {
       params['mes'] =
@@ -285,7 +318,7 @@ class ApiService {
   Future<Map<String, dynamic>> createFluxo(FluxoCaixa fluxo) async {
     try {
       // A API rejeita id nulo (int(None) no from_dict); envia 0 na criação
-      final body = fluxo.toJson();
+      final body = _comCliente(fluxo.toJson());
       body['id'] ??= 0;
 
       final response = await _handleRequest(
@@ -318,7 +351,7 @@ class ApiService {
         () => http.put(
           Uri.parse('$_baseUrl/finance/fluxo'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(fluxo.toJson()),
+          body: json.encode(_comCliente(fluxo.toJson())),
         ),
         'updateFluxo',
       );
@@ -347,7 +380,7 @@ class ApiService {
   ///
   /// Devolve quantas parcelas foram atualizadas.
   Future<int> updateFluxoGrupo(FluxoCaixa fluxo, List<String> campos) async {
-    final corpo = {...fluxo.toJson(), 'campos': campos};
+    final corpo = _comCliente({...fluxo.toJson(), 'campos': campos});
 
     try {
       final response = await _handleRequest(
@@ -384,7 +417,7 @@ class ApiService {
   /// exclusão do lote.
   Future<Map<String, dynamic>> deleteFluxo(int id, int idRef) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.delete(
@@ -434,7 +467,7 @@ class ApiService {
 
   Future<List<Categoria>> listCategorias() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/categoria/list/$idLoja')),
@@ -465,7 +498,7 @@ class ApiService {
         () => http.post(
           Uri.parse('$_baseUrl/finance/categoria'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(categoria.toJson()),
+          body: json.encode(_comCliente(categoria.toJson())),
         ),
         'createCategoria',
       );
@@ -501,7 +534,7 @@ class ApiService {
   /// em memória por categoria, em vez de bater na API a cada troca de círculo.
   Future<List<Subcategoria>> listSubcategorias() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
       final response = await _handleRequest(
         () => http.get(
           Uri.parse('$_baseUrl/finance/subcategoria/cliente/$idLoja'),
@@ -536,7 +569,7 @@ class ApiService {
         () => http.post(
           Uri.parse('$_baseUrl/finance/subcategoria'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(subcategoria.toJson()),
+          body: json.encode(_comCliente(subcategoria.toJson())),
         ),
         'createSubcategoria',
       );
@@ -563,7 +596,7 @@ class ApiService {
   /// acrescentaria uma terceira requisição a um modal que já faz duas.
   Future<List<Conta>> listContas() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/conta/list/$idLoja')),
@@ -593,7 +626,7 @@ class ApiService {
   /// A lista pode trazer uma entrada com `id == 0` ("Sem conta"), que é onde mora
   /// tudo que foi lançado antes de existir conta cadastrada.
   Future<List<SaldoConta>> getSaldosContas({DateTime? ate}) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{};
     if (ate != null) params['ate'] = _data(ate);
 
@@ -633,7 +666,7 @@ class ApiService {
     DateTime? de,
     DateTime? ate,
   }) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{};
     if (de != null) params['de'] = _data(de);
     if (ate != null) params['ate'] = _data(ate);
@@ -674,7 +707,7 @@ class ApiService {
         () => http.post(
           Uri.parse('$_baseUrl/finance/conta'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(conta.toJson()),
+          body: json.encode(_comCliente(conta.toJson())),
         ),
         'createConta',
       );
@@ -699,7 +732,7 @@ class ApiService {
         () => http.put(
           Uri.parse('$_baseUrl/finance/conta'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(conta.toJson()),
+          body: json.encode(_comCliente(conta.toJson())),
         ),
         'updateConta',
       );
@@ -724,7 +757,7 @@ class ApiService {
   /// tratadas numa transação só do lado do servidor.
   Future<void> deleteConta(int id, {int moverPara = 0}) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final uri = Uri.parse(
         '$_baseUrl/finance/conta/$id/$idLoja',
@@ -763,7 +796,7 @@ class ApiService {
     String? observacao,
   }) async {
     final corpo = <String, dynamic>{
-      'id_cliente': GlobalState().firstIdLoja,
+      'id_cliente': _idCliente,
       'id_origem': idOrigem,
       'id_destino': idDestino,
       'valor': valor,
@@ -803,7 +836,7 @@ class ApiService {
   /// errado.
   Future<void> deleteTransferencia(int idTransferencia) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.delete(
@@ -842,7 +875,7 @@ class ApiService {
   /// [listContas].
   Future<List<Cartao>> listCartoes() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/cartao/list/$idLoja')),
@@ -871,7 +904,7 @@ class ApiService {
   /// por mês é a tela da fatura, via [getFatura].
   Future<List<ResumoCartao>> getResumoCartoes() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/cartao/resumo/$idLoja')),
@@ -902,7 +935,7 @@ class ApiService {
         () => http.post(
           Uri.parse('$_baseUrl/finance/cartao'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(cartao.toJson()),
+          body: json.encode(_comCliente(cartao.toJson())),
         ),
         'createCartao',
       );
@@ -927,7 +960,7 @@ class ApiService {
         () => http.put(
           Uri.parse('$_baseUrl/finance/cartao'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(cartao.toJson()),
+          body: json.encode(_comCliente(cartao.toJson())),
         ),
         'updateCartao',
       );
@@ -957,7 +990,7 @@ class ApiService {
   /// "não foi possível" em vez de oferecer a escolha.
   Future<int?> deleteCartao(int id, {bool comMovimentos = false}) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final uri = Uri.parse('$_baseUrl/finance/cartao/$id/$idLoja').replace(
         queryParameters: comMovimentos ? {'com_movimentos': '1'} : null,
@@ -998,7 +1031,7 @@ class ApiService {
   /// (a que uma compra de hoje receberia). Competência sem lançamento nenhum não
   /// é erro: vem a fatura vazia, com `id == 0` e as datas do ciclo do cartão.
   Future<FaturaDetalhe> getFatura(int idCartao, {DateTime? competencia}) async {
-    final idLoja = GlobalState().firstIdLoja;
+    final idLoja = _idCliente;
     final params = <String, String>{};
     if (competencia != null) {
       params['competencia'] = chaveCompetencia(competencia);
@@ -1029,7 +1062,7 @@ class ApiService {
   /// As competências que têm fatura, com saldo — alimenta o atalho de meses.
   Future<List<ResumoFatura>> listFaturas(int idCartao) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(
@@ -1063,7 +1096,7 @@ class ApiService {
   /// Devolve o valor congelado, para a tela confirmar o que foi gerado.
   Future<double> fecharFatura(int idFatura) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.post(
@@ -1100,7 +1133,7 @@ class ApiService {
   /// conta desaparecer do caixa.
   Future<void> reabrirFatura(int idFatura) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.delete(
@@ -1149,7 +1182,7 @@ class ApiService {
     };
 
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.post(
@@ -1195,7 +1228,7 @@ class ApiService {
         () => http.post(
           Uri.parse('$_baseUrl/finance/cartao/movimento'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(movimento.toJson()),
+          body: json.encode(_comCliente(movimento.toJson())),
         ),
         'createMovimentoCartao',
       );
@@ -1224,7 +1257,7 @@ class ApiService {
         () => http.put(
           Uri.parse('$_baseUrl/finance/cartao/movimento'),
           headers: {'Content-Type': 'application/json'},
-          body: json.encode(movimento.toJson()),
+          body: json.encode(_comCliente(movimento.toJson())),
         ),
         'updateMovimentoCartao',
       );
@@ -1250,7 +1283,7 @@ class ApiService {
   /// parcela" em "excluir a compra".
   Future<void> deleteMovimentoCartao(int id, int idRef) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.delete(
@@ -1278,7 +1311,7 @@ class ApiService {
   /// (a API responde success:false com msg vazia nesse caso).
   Future<Caixa?> getCaixa() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/caixa/$idLoja')),
@@ -1306,7 +1339,7 @@ class ApiService {
 
   Future<List<Caixa>> getCaixas() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/caixas/$idLoja')),
@@ -1327,7 +1360,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> updateCaixa(Caixa caixa) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.post(
@@ -1358,7 +1391,7 @@ class ApiService {
   // Relatório Mensal
   Future<List<RelatorioMensal>> getRelatorioMensal(int ano) async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () =>
@@ -1386,7 +1419,7 @@ class ApiService {
   // Relatório Semanal
   Future<List<RelatorioSemanal>> getRelatorioSemanal() async {
     try {
-      final idLoja = GlobalState().firstIdLoja;
+      final idLoja = _idCliente;
 
       final response = await _handleRequest(
         () => http.get(Uri.parse('$_baseUrl/finance/caixa/semanal/$idLoja')),
