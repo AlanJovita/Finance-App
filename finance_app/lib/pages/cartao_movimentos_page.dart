@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/cartao.dart';
@@ -11,8 +12,10 @@ import '../utils/app_tokens.dart';
 import '../utils/bandeiras.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/meses.dart';
+import '../utils/ofx.dart';
 import '../utils/responsive_utils.dart';
 import '../widgets/card_movimento_cartao.dart';
+import '../widgets/importar_ofx_dialog.dart';
 import '../widgets/logo_bandeira.dart';
 import '../widgets/movimento_cartao_form_dialog.dart';
 import '../widgets/pagamento_fatura_dialog.dart';
@@ -90,6 +93,11 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
   /// depois de o primeiro ter gravado.
   bool _emAcao = false;
 
+  /// Escolhendo ou lendo o arquivo da importação. Separado do [_emAcao] porque
+  /// não mexe na fatura: é só para o ícone da barra não aceitar dois toques
+  /// enquanto o seletor de arquivo está aberto.
+  bool _importando = false;
+
   @override
   void initState() {
     super.initState();
@@ -146,7 +154,8 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
         stackTrace: s,
         additionalInfo: {
           'idCartao': _cartao.id,
-          if (_competencia != null) 'competencia': chaveCompetencia(_competencia!),
+          if (_competencia != null)
+            'competencia': chaveCompetencia(_competencia!),
         },
       );
 
@@ -277,6 +286,94 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
             // "salvar e continuar" também: a fatura atrás muda a cada gravação, e
             // atualizá-la é a única confirmação visível de que a anterior entrou.
             onSalvou: (_) => _recarregar(),
+          ),
+    );
+  }
+
+  /// Escolhe o arquivo, lê, e abre a revisão.
+  ///
+  /// A escolha acontece **aqui**, dentro do toque do usuário, e não dentro do
+  /// diálogo: na web o navegador só abre o seletor de arquivo durante o gesto, e
+  /// um `pickFile()` disparado depois da animação de um diálogo pode ser
+  /// bloqueado sem erro nenhum à vista.
+  ///
+  /// Ler o arquivo é síncrono o bastante para não precisar de tela própria — o
+  /// spinner no ícone cobre o caso do arquivo grande e do disco lento.
+  Future<void> _importarOfx() async {
+    if (_importando) return;
+
+    PlatformFile? arquivo;
+    try {
+      arquivo = await FilePicker.pickFile(
+        dialogTitle: 'Selecione o extrato OFX do cartão',
+        type: FileType.custom,
+        allowedExtensions: const ['ofx'],
+      );
+    } catch (e, s) {
+      // Plugin indisponível (navegador antigo, permissão negada): é falha de
+      // plataforma, não de arquivo, e precisa aparecer no log.
+      await _logger.logError(
+        'CartaoMovimentosPage._importarOfx (seletor)',
+        e,
+        stackTrace: s,
+      );
+      if (mounted) _avisar('Não foi possível abrir o seletor de arquivos.');
+      return;
+    }
+
+    // Cancelou: nada a fazer, e nada a dizer.
+    if (arquivo == null || !mounted) return;
+
+    final escolhido = arquivo;
+    setState(() => _importando = true);
+
+    ExtratoOfx extrato;
+    try {
+      extrato = ExtratoOfx.deBytes(await escolhido.readAsBytes());
+    } on OfxInvalidoException catch (e) {
+      // Arquivo errado é erro do usuário, não do app: a mensagem já explica o
+      // que fazer e não vai para o log remoto.
+      if (mounted) _avisar(e.motivo);
+      return;
+    } catch (e, s) {
+      await _logger.logError(
+        'CartaoMovimentosPage._importarOfx (leitura)',
+        e,
+        stackTrace: s,
+        additionalInfo: {'arquivo': escolhido.name},
+      );
+      if (mounted) _avisar('Não consegui ler o arquivo.');
+      return;
+    } finally {
+      if (mounted) setState(() => _importando = false);
+    }
+
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder:
+          (_) => ImportarOfxDialog(
+            cartao: _cartao,
+            extrato: extrato,
+            nomeArquivo: escolhido.name,
+            // A fatura em foco é a base da conciliação: é nela que os
+            // lançamentos vão cair, e é o que o usuário está vendo atrás.
+            movimentos: _movimentos,
+            categorias:
+                _categorias.values.where((c) => c.tipoFluxo == 2).toList()
+                  ..sort((a, b) => a.descricao.compareTo(b.descricao)),
+            onImportou: (importados, falhas) {
+              _recarregar();
+              _avisar(
+                falhas == 0
+                    ? '$importados ${importados == 1 ? 'lançamento' : 'lançamentos'} '
+                        'importados.'
+                    : '$importados importados, $falhas não entraram. '
+                        'Importe o arquivo de novo para tentar os que faltam.',
+                sucesso: falhas == 0,
+              );
+            },
           ),
     );
   }
@@ -566,6 +663,25 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
             ),
           ],
         ),
+        actions: [
+          // Só na fatura que aceita lançamento, pelo mesmo motivo do botão de
+          // novo lançamento: numa fatura fechada a API rolaria tudo para a
+          // próxima aberta, e uma importação que vai para outro mês é pior que
+          // uma importação indisponível.
+          if (podeLancar)
+            IconButton(
+              onPressed: _importando ? null : _importarOfx,
+              tooltip: 'Importar extrato OFX',
+              icon:
+                  _importando
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.upload_file),
+            ),
+        ],
       ),
       floatingActionButton:
           !podeLancar
@@ -575,12 +691,7 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
                 tooltip: 'Novo lançamento',
                 child: const Icon(Icons.add),
               ),
-      body: Column(
-        children: [
-          _navegador(),
-          Expanded(child: _corpo()),
-        ],
-      ),
+      body: Column(children: [_navegador(), Expanded(child: _corpo())]),
       bottomNavigationBar: _detalhe == null ? null : _rodape(),
     );
   }
@@ -695,7 +806,10 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
           itens.add(
             PopupMenuItem(
               enabled: false,
-              child: Text('Nenhuma fatura ainda', style: theme.textTheme.bodySmall),
+              child: Text(
+                'Nenhuma fatura ainda',
+                style: theme.textTheme.bodySmall,
+              ),
             ),
           );
         }
@@ -947,7 +1061,10 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
   ) {
     final (texto, cor) = switch (fatura.status) {
       StatusFatura.paga => ('Paga', cores.success),
-      StatusFatura.fechada => (vencida ? 'Vencida' : 'Fechada', vencida ? cores.error : cores.warning),
+      StatusFatura.fechada => (
+        vencida ? 'Vencida' : 'Fechada',
+        vencida ? cores.error : cores.warning,
+      ),
       StatusFatura.aberta => ('Aberta', cores.info),
     };
 

@@ -228,6 +228,58 @@ status desconhecido caindo em *aberta*, `pagamento` fora de `creditosLancaveis`,
 `limite_disponivel` nulo que não pode virar 0, e a tolerância de meio centavo que impede um
 resíduo de `decimal(11,2)` de deixar a fatura "paga em parte" para sempre.
 
+**Importação de OFX no cartão** (`lib/utils/ofx.dart`, `lib/utils/ofx_importacao.dart`,
+`lib/widgets/importar_ofx_dialog.dart`): o ícone na barra da fatura lê o extrato do banco e
+abre uma revisão linha a linha. Seis coisas não se leem no código.
+
+**O parser é à mão porque o formato é SGML, não XML.** O que os bancos brasileiros
+exportam é OFX 1.x: cabeçalho em `CHAVE:valor` antes do `<OFX>` e tag de folha que pode vir
+**sem fechamento** (`<TRNAMT>-108.99` em vez de `<TRNAMT>-108.99</TRNAMT>`). O Nubank
+fecha, outros bancos não, e um parser de XML morre no segundo caso; os pacotes de OFX no pub
+ou estão abandonados ou só entendem OFX 2. Daí a leitura por tag tolerante — valor é o que
+vem depois da tag até o próximo `<`. O fuso do `DTPOSTED` (`[-3:BRT]`) é **descartado**:
+aplicá-lo moveria a meia-noite para as 21h do dia anterior e a compra mudaria de dia —
+às vezes de fatura. O encoding tenta UTF-8 e cai para Latin-1, porque há banco que declara
+`CHARSET:1252` e escreve UTF-8.
+
+**Cada linha do arquivo é UM movimento, com `total_parcelas = 1`** — inclusive as que o
+banco marca "Parcela 5/12". O extrato traz *uma* parcela, já cobrada nesta fatura; mandar 12
+faria a API criar doze linhas em doze faturas consecutivas (é o que `total_parcelas > 1`
+significa lá), e o arquivo do mês seguinte traria "Parcela 6/12" para duplicar tudo. A
+posição fica no texto, que é onde o banco a pôs.
+
+**A conciliação é por (data + valor + descrição), contando repetição — não por `FITID`.**
+Duas razões, as duas vistas no primeiro extrato real: o Nubank **repete o `FITID`** entre o
+IOF e a compra internacional que o gerou (dois lançamentos legítimos com o mesmo id), e o
+mesmo extrato tem **três linhas idênticas** no mesmo dia (`Pjbank *Saipos`, R$ 99,00), todas
+verdadeiras — comparando por conjunto, duas seriam dadas como já importadas. O limite
+conhecido: editar a descrição de um movimento importado faz a próxima importação oferecê-lo
+de novo. Fechar isso exigiria guardar o `FITID` no banco (coluna nova em
+`finance_cartao_movimento`, no fim da tabela), e foi deixado de fora de propósito.
+
+**O pagamento da fatura não é importável, e nem fica marcável.** A API recusa
+(`"Pagamento de fatura deve ser registrado pela fatura"`) porque é ele que dá baixa na
+despesa da fatura no caixa. Importá-lo como estorno — a saída preguiçosa, já que no OFX os
+dois são `CREDIT` — abateria o saldo devedor sem contrapartida nenhuma: o dinheiro sairia
+do cartão e desapareceria do caixa. Estorno e cashback **são** importáveis, mas nascem
+desmarcados: a natureza é escolha de quem está olhando.
+
+**Quem abre o seletor de arquivo é a página, não o diálogo.** Na web o navegador só abre o
+seletor dentro do gesto do usuário, e um `pickFile()` disparado depois da animação de um
+diálogo pode ser bloqueado sem erro à vista. Isso também deixa o `ImportarOfxDialog` livre
+de `file_picker` e testável sem plugin.
+
+**Os POST são sequenciais**, um por lançamento. A API resolve (ou cria) a fatura dentro do
+INSERT, e disparar 24 em paralelo viraria 24 tentativas de criar a mesma fatura ao mesmo
+tempo. Uma falha no meio não interrompe o resto nem desfaz o que entrou — a importação
+seguinte do mesmo arquivo oferece só o que falta. O importador também **avisa quando o
+`DTEND` não cai no dia de fechamento cadastrado**: quem decide a fatura é o cadastro, não o
+arquivo, e aí os lançamentos se espalhariam entre duas faturas.
+
+`test/ofx_test.dart` trava o parser (tag sem fechamento, Latin-1, fuso, valor em formato
+brasileiro, recusa de extrato de conta bancária) e a conciliação com os dois casos reais —
+o `FITID` repetido e as três linhas iguais.
+
 **Painel** (`lib/pages/dashboard_page.dart`): a tela tem **dois resumos independentes**, e
 cada um aparece só se tiver assunto — o do caixa e o das receitas/despesas.
 
