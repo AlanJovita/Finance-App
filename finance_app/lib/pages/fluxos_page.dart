@@ -21,6 +21,8 @@ import '../widgets/app_drawer.dart';
 import '../widgets/moldura_menu.dart';
 import '../widgets/card_fluxo.dart';
 import '../widgets/detalhes_mes_dialog.dart';
+import '../models/edicao_lote.dart';
+import '../widgets/edicao_lote_dialog.dart';
 import '../widgets/fluxo_form_dialog.dart';
 import '../widgets/pagamento_dialog.dart';
 import '../widgets/shimmer_widgets.dart';
@@ -138,6 +140,29 @@ class _FluxosPageState extends State<FluxosPage> {
   /// cara, então só é disparada quando o resumo mensal confirma que existem —
   /// e o resultado vale para a sessão inteira da tela.
   List<FluxoCaixa>? _semData;
+
+  // ── seleção em lote ─────────────────────────────────────────────────────
+  //
+  // O botão da barra tem dois toques: o primeiro liga o modo e mostra as caixas
+  // **vazias**, o segundo abre o modal com o que foi marcado. Começar com tudo
+  // marcado foi recusado de propósito — nenhuma ação em massa deve começar já
+  // apontada para a tela inteira.
+
+  bool _modoSelecao = false;
+
+  /// Ids marcados. Sobrevive à rolagem e ao filtro; o que o filtro faz é tirar
+  /// o card de vista, e [_idsSelecionados] só considera o que está visível.
+  final Set<int> _selecionados = {};
+
+  /// O que o lote vai alterar: os marcados que **ainda estão na lista**.
+  ///
+  /// Filtrar depois de marcar não pode gravar no que saiu de vista: o lojista
+  /// marcou olhando uma lista, e a confirmação fala de "N lançamentos" — os N
+  /// que ele está vendo.
+  List<int> get _idsSelecionados => [
+    for (final fluxo in _itensVisiveis)
+      if (fluxo.id != null && _selecionados.contains(fluxo.id)) fluxo.id!,
+  ];
 
   Map<int, Categoria> _categorias = {};
   Map<int, Subcategoria> _subcategorias = {};
@@ -485,6 +510,117 @@ class _FluxosPageState extends State<FluxosPage> {
     );
   }
 
+  // ------------------------------------------------------ edição em lote
+
+  /// O botão da barra. Primeiro toque liga a seleção; segundo abre o modal.
+  void _botaoLote() {
+    if (!_modoSelecao) {
+      setState(() {
+        _modoSelecao = true;
+        _selecionados.clear();
+      });
+      return;
+    }
+
+    _abrirEdicaoLote();
+  }
+
+  void _sairDaSelecao() {
+    setState(() {
+      _modoSelecao = false;
+      _selecionados.clear();
+    });
+  }
+
+  void _alternarSelecao(FluxoCaixa fluxo) {
+    final id = fluxo.id;
+    if (id == null) return;
+
+    setState(() {
+      if (!_selecionados.remove(id)) _selecionados.add(id);
+    });
+  }
+
+  /// Marca tudo que está à vista, ou limpa se já estiver tudo marcado.
+  void _alternarTodos() {
+    final visiveis = [
+      for (final f in _itensVisiveis)
+        if (f.id != null) f.id!,
+    ];
+
+    setState(() {
+      if (visiveis.every(_selecionados.contains)) {
+        _selecionados.removeAll(visiveis);
+      } else {
+        _selecionados.addAll(visiveis);
+      }
+    });
+  }
+
+  Future<void> _abrirEdicaoLote() async {
+    final ids = _idsSelecionados;
+    if (ids.isEmpty) return;
+
+    final alteracao = await pedirAlteracaoLote(
+      context,
+      quantidade: ids.length,
+      campos: CampoLote.doFluxo,
+      categorias: _categorias.values
+          .where((c) => c.tipoFluxo == _tipo.codigo)
+          .toList(),
+      subcategorias: _subcategorias.values.toList(),
+      contas: _contas.values.where((c) => c.ativado).toList(),
+    );
+
+    if (alteracao == null || !mounted) return;
+
+    try {
+      final resultado = await _apiService.updateFluxoLote(ids, alteracao.corpo);
+
+      if (!mounted) return;
+
+      _sairDaSelecao();
+      _recarregar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mensagemLote(resultado, ids.length)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e, s) {
+      await _logger.logError(
+        'FluxosPage._abrirEdicaoLote',
+        e,
+        stackTrace: s,
+        additionalInfo: {
+          'quantidade': ids.length,
+          'campos': alteracao.corpo.keys.toList(),
+          'tipo': _tipo.codigo,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erro ao alterar em lote: $e')));
+    }
+  }
+
+  /// `atualizados` pode ser menor que o selecionado sem que nada tenha falhado:
+  /// linha que já estava com o valor pedido não conta como alterada pelo MySQL.
+  /// Dizer "23 de 30" nesse caso pareceria erro, então a mensagem só fala do
+  /// que mudou.
+  String _mensagemLote(ResultadoLote resultado, int pedidos) {
+    final n = resultado.atualizados;
+
+    if (n == 0) {
+      return 'Nenhum lançamento precisou ser alterado.';
+    }
+
+    final alvo = n == 1 ? '1 lançamento' : '$n lançamentos';
+    return '$alvo alterado${n == 1 ? '' : 's'}.';
+  }
+
   Future<void> _darBaixa(FluxoCaixa fluxo) async {
     final confirmou = await showDialog<bool>(
       context: context,
@@ -680,6 +816,7 @@ class _FluxosPageState extends State<FluxosPage> {
       body: Column(
         children: [
           _buildBarraFiltros(),
+          if (_modoSelecao) _buildBarraSelecao(),
           Expanded(child: _buildLista()),
         ],
       ),
@@ -798,6 +935,8 @@ class _FluxosPageState extends State<FluxosPage> {
         _buildFiltroConta(),
         const SizedBox(width: AppSpacing.xs),
         _buildFiltroSituacao(),
+        const SizedBox(width: AppSpacing.md),
+        _buildBotaoLote(),
       ],
     );
   }
@@ -818,11 +957,14 @@ class _FluxosPageState extends State<FluxosPage> {
           visualDensity: VisualDensity.compact,
           onPressed: () => setState(() => _buscaAberta = true),
         ),
-        Expanded(child: Center(child: _buildNavegadorMes(larguraRotulo: 132))),
+        // 112 e não 132: o botão de lote entrou nesta linha, e em 360px
+        // os dois quadrados mais a lupa não deixam o rótulo largo.
+        Expanded(child: Center(child: _buildNavegadorMes(larguraRotulo: 112))),
         // Um quadrado só: três mais a lupa e o seletor de mês não cabem em
         // 360px sem espremer o nome do mês. Ele abre a folha com os três
         // filtros, que é onde o celular tem espaço de sobra.
         _buildBotaoFolhaFiltros(),
+        _buildBotaoLote(),
       ],
     );
   }
@@ -999,6 +1141,91 @@ class _FluxosPageState extends State<FluxosPage> {
 
   /// A moldura dos três: quadrado de [_alturaControle], borda e glifo acesos
   /// quando o filtro está ativo.
+  /// O botão de alteração em lote, à direita dos filtros.
+  ///
+  /// Dois toques, um botão: o primeiro liga a seleção, o segundo abre o modal
+  /// com o que estiver marcado. No segundo estado ele fica **inativo enquanto
+  /// nada estiver marcado** — é o que impede o toque de repetição abrir um
+  /// modal que não teria o que alterar.
+  Widget _buildBotaoLote() {
+    final cores = context.appColors;
+    final selecionados = _modoSelecao ? _idsSelecionados.length : 0;
+    final podeAbrir = !_modoSelecao || selecionados > 0;
+
+    return Tooltip(
+      message: _modoSelecao
+          ? (selecionados > 0
+                ? 'Alterar $selecionados selecionado'
+                      '${selecionados == 1 ? '' : 's'}'
+                : 'Marque ao menos um lançamento')
+          : 'Alterar em lote',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: podeAbrir ? _botaoLote : null,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Opacity(
+            opacity: podeAbrir ? 1 : 0.4,
+            child: _molduraFiltro(
+              icone: _modoSelecao ? Icons.edit_note : Icons.checklist,
+              ativo: _modoSelecao,
+              corAtiva: cores.info,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A faixa que aparece abaixo dos filtros enquanto se seleciona.
+  ///
+  /// Ela existe por duas coisas que o botão sozinho não resolve: dizer quantos
+  /// estão marcados (a contagem é o que o modal vai confirmar) e **oferecer a
+  /// saída** — sem o "X", ligar a seleção por engano seria um beco, porque o
+  /// botão da barra passa a abrir o modal.
+  Widget _buildBarraSelecao() {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+
+    final visiveis = _itensVisiveis.where((f) => f.id != null).length;
+    final marcados = _idsSelecionados.length;
+    final todos = visiveis > 0 && marcados == visiveis;
+
+    return Material(
+      color: cores.info.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                marcados == 0
+                    ? 'Nenhum lançamento selecionado'
+                    : '$marcados de $visiveis selecionado'
+                          '${marcados == 1 ? '' : 's'}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            if (visiveis > 0)
+              TextButton(
+                onPressed: _alternarTodos,
+                child: Text(todos ? 'Limpar' : 'Marcar todos'),
+              ),
+            IconButton(
+              onPressed: _sairDaSelecao,
+              tooltip: 'Sair da seleção',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _molduraFiltro({
     required IconData icone,
     required bool ativo,
@@ -1534,6 +1761,8 @@ class _FluxosPageState extends State<FluxosPage> {
       onBaixar: () => _darBaixa(fluxo),
       onEstornar: () => _estornar(fluxo),
       onExcluir: () => _confirmarExclusao(fluxo),
+      selecionado: _modoSelecao ? _selecionados.contains(fluxo.id) : null,
+      onAlternarSelecao: () => _alternarSelecao(fluxo),
     );
   }
 

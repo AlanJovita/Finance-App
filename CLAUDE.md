@@ -246,6 +246,47 @@ que não tinha representação no card, ganhou o espaço que o rótulo de status
 ocupava. Lançamento sem conta não mostra chip: `id_conta = 0` é o padrão de tudo
 que vem do PDV, e "Sem conta" na maioria das linhas seria só ruído.
 
+**Alteração em lote** (`widgets/edicao_lote_dialog.dart`, `models/edicao_lote.dart`):
+existe nas três listas — Receitas, Despesas e lançamentos do cartão. O botão da barra tem
+**dois toques**: o primeiro liga a seleção e mostra as caixas **vazias**, o segundo abre o
+modal com o que foi marcado. Cinco coisas aí são decisão.
+
+**Nada vem preenchido, e cada campo tem um estado a mais: "não alterar".** É ele o padrão,
+e é o que faz o lote gravar só o que foi tocado. Um modal que abrisse com os valores atuais
+teria de escolher os de **um** dos selecionados e gravá-los nos outros — não existe "valor
+atual" de 30 lançamentos com categorias diferentes. Por isso são `DropdownButtonFormField`
+com item sentinela, e não os seletores ricos do `FluxoFormDialog`: a pergunta aqui não é
+"qual categoria", é "mexo na categoria?".
+
+**Começar com tudo marcado foi recusado**: nenhuma ação em massa deve nascer apontada para
+a tela inteira. Quem quer tudo usa o "Marcar todos" da faixa de seleção — que também é onde
+mora o "X", a única saída do modo, já que o botão da barra passou a abrir o modal.
+
+**A confirmação é uma segunda etapa, não um `AlertDialog` genérico**: ela diz quais
+propriedades e quantos lançamentos ("Conta e Categoria em 23 lançamentos") porque não há
+desfazer. A lista só considera o que está **visível**: filtrar depois de marcar não pode
+gravar no que saiu de vista — ver `_idsSelecionados`.
+
+**`confirmado` em lote não é dar baixa.** O `PagamentoDialog` calcula o valor líquido a
+partir de encargos e desconto e grava em `valor`; o lote só vira o flag, mantendo o valor.
+Serve para corrigir em massa o que foi lançado errado, não para pagar.
+
+**O cartão só oferece categoria e subcategoria** (`CampoLote.doCartao`), e isso não é
+limitação de implementação: `id_conta` e `confirmado` não existem em
+`finance_cartao_movimento`. Lá o botão também some em fatura fechada, que a API recusa.
+
+**Escolher subcategoria exige escolher categoria antes** — ela pertence a uma categoria, e
+aplicá-la a lançamentos de categorias diferentes deixaria a trilha `Categoria ›
+Subcategoria` mentindo em parte deles. Trocar a categoria descarta a subcategoria já
+escolhida. **Limpar é a exceção**: "Sem subcategoria" é sempre seguro e continua
+disponível. `test/edicao_lote_test.dart` trava o conjunto.
+
+Do outro lado, `PUT /fluxo/lote` e `PUT /cartao/movimento/lote` escrevem **só as colunas
+recebidas** (ver o CLAUDE.md da API). Não é um laço de `updateFluxo`: aquele PUT reescreve
+a linha inteira — é o que o PDV usa para sincronizar — e repeti-lo em lote devolveria ao
+banco a cópia que a tela carregou, desfazendo em silêncio o que o PDV tivesse gravado,
+em linhas que o lojista nem está olhando.
+
 **Os filtros da lista são três quadrados iguais** (categoria, conta, situação),
 todos locais sobre o mês que já está em memória. A caixa compartilhada é o que
 os faz ler como um grupo, e o que sobra de largura fica com a busca — antes o

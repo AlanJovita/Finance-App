@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/edicao_lote.dart';
 import '../models/fluxo_caixa.dart';
 import '../models/cartao.dart';
 import '../models/categoria.dart';
@@ -388,6 +389,91 @@ class ApiService {
       rethrow;
     }
   }
+
+/// Aplica os mesmos campos a vários lançamentos de uma vez.
+  ///
+  /// **Não é um laço de [updateFluxo].** Aquele PUT reescreve a linha inteira
+  /// com o que o app tem em memória — é o que o PDV também usa para sincronizar
+  /// — e repeti-lo em lote devolveria ao banco a cópia que a tela carregou,
+  /// desfazendo em silêncio o que o PDV tivesse gravado desde então, em linhas
+  /// que o lojista nem está olhando. A rota de lote escreve **só as colunas que
+  /// recebe**.
+  ///
+  /// [campos] vem do modal e só traz o que foi preenchido. Devolve quantas
+  /// linhas o banco mudou — menos que o selecionado quando alguma já estava com
+  /// o valor pedido.
+  Future<ResultadoLote> updateFluxoLote(
+    List<int> ids,
+    Map<String, Object> campos,
+  ) => _lote(
+    caminho: 'fluxo/lote',
+    endpoint: 'updateFluxoLote',
+    ids: ids,
+    campos: campos,
+  );
+
+  /// O gêmeo do cartão. Aceita **só** `id_categoria` e `id_subcategoria`: as
+  /// outras duas colunas não existem nessa tabela.
+  ///
+  /// Lançamento em fatura fechada fica de fora do UPDATE em silêncio, pela mesma
+  /// regra do [updateMovimentoCartao]. É por isso que o resultado compara
+  /// `atualizados` com `selecionados`: a diferença é o que a tela avisa.
+  Future<ResultadoLote> updateMovimentoCartaoLote(
+    List<int> ids,
+    Map<String, Object> campos,
+  ) => _lote(
+    caminho: 'cartao/movimento/lote',
+    endpoint: 'updateMovimentoCartaoLote',
+    ids: ids,
+    campos: campos,
+  );
+
+  /// O corpo e a leitura da resposta são os mesmos nas duas rotas de lote.
+  Future<ResultadoLote> _lote({
+    required String caminho,
+    required String endpoint,
+    required List<int> ids,
+    required Map<String, Object> campos,
+  }) async {
+    // `exigirIdCliente` em vez do 0 silencioso: um lote sem sessão escreveria
+    // no cliente 0, e aí são N linhas perdidas em vez de uma.
+    final corpo = {'id_cliente': _idCliente, 'ids': ids, 'campos': campos};
+
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/$caminho'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(corpo),
+        ),
+        endpoint,
+      );
+
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao alterar os lançamentos.');
+      }
+
+      final dados = response['data'];
+      final mapa = dados is Map ? dados : const {};
+
+      return ResultadoLote(
+        atualizados: (mapa['atualizados'] as num?)?.toInt() ?? 0,
+        // A rota do fluxo não devolve `selecionados` porque lá nada é recusado
+        // em silêncio: o que foi pedido foi escrito.
+        selecionados:
+            (mapa['selecionados'] as num?)?.toInt() ?? ids.length,
+      );
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.$endpoint',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'quantidade': ids.length, 'campos': campos},
+      );
+      rethrow;
+    }
+  }
+
 
   /// Apaga um lançamento, ou o parcelamento inteiro.
   ///

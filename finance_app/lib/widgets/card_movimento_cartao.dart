@@ -33,6 +33,12 @@ class CardMovimentoCartao extends StatelessWidget {
   /// levaria a uma mensagem de erro em vez de a um formulário.
   final bool faturaFechada;
 
+  /// Modo seleção. `null` é o normal; com valor, o card ganha a caixa à
+  /// esquerda e o toque passa a marcar em vez de abrir a edição.
+  final bool? selecionado;
+
+  final VoidCallback? onAlternarSelecao;
+
   final VoidCallback onEditar;
   final VoidCallback onExcluir;
 
@@ -42,6 +48,8 @@ class CardMovimentoCartao extends StatelessWidget {
     required this.categoria,
     required this.subcategoria,
     required this.faturaFechada,
+    this.selecionado,
+    this.onAlternarSelecao,
     required this.onEditar,
     required this.onExcluir,
   });
@@ -66,7 +74,9 @@ class CardMovimentoCartao extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: InkWell(
-        onTap: faturaFechada ? null : onEditar,
+        onTap: selecionado != null
+            ? onAlternarSelecao
+            : (faturaFechada ? null : onEditar),
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -77,6 +87,16 @@ class CardMovimentoCartao extends StatelessWidget {
           ),
           child: Row(
             children: [
+              if (selecionado != null)
+                Checkbox(
+                  value: selecionado,
+                  // Fatura fechada é recusada pela API; marcá-la só
+                  // levaria a uma alteração que não acontece.
+                  onChanged: faturaFechada
+                      ? null
+                      : (_) => onAlternarSelecao?.call(),
+                  visualDensity: VisualDensity.compact,
+                ),
               Opacity(
                 opacity: cancelado ? 0.5 : 1,
                 child:
@@ -124,7 +144,10 @@ class CardMovimentoCartao extends StatelessWidget {
                   decoration: cancelado ? TextDecoration.lineThrough : null,
                 ),
               ),
-              _buildMenu(theme, cores),
+              // O menu some durante a seleção: são ações de **um**
+              // lançamento, e um alvo de toque desses no meio de uma
+              // lista de caixas é um clique errado esperando acontecer.
+              if (selecionado == null) _buildMenu(theme, cores),
             ],
           ),
         ),

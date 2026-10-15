@@ -54,6 +54,13 @@ class CardFluxo extends StatelessWidget {
   final VoidCallback onEstornar;
   final VoidCallback onExcluir;
 
+  /// Modo seleção. `null` é o normal: sem caixa de marcação, e tocar o card
+  /// abre a edição. Com valor, o card ganha a caixa à esquerda e o toque passa
+  /// a marcar — a edição em lote é sobre escolher linhas, não abrir uma.
+  final bool? selecionado;
+
+  final VoidCallback? onAlternarSelecao;
+
   /// Injetável para o teste fixar o "hoje" e a situação não mudar com o
   /// calendário da máquina.
   final DateTime? hoje;
@@ -71,6 +78,8 @@ class CardFluxo extends StatelessWidget {
     required this.onBaixar,
     required this.onEstornar,
     required this.onExcluir,
+    this.selecionado,
+    this.onAlternarSelecao,
     this.hoje,
   });
 
@@ -88,7 +97,7 @@ class CardFluxo extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: InkWell(
-        onTap: onEditar,
+        onTap: selecionado == null ? onEditar : onAlternarSelecao,
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -99,6 +108,12 @@ class CardFluxo extends StatelessWidget {
           ),
           child: Row(
             children: [
+              if (selecionado != null)
+                Checkbox(
+                  value: selecionado,
+                  onChanged: (_) => onAlternarSelecao?.call(),
+                  visualDensity: VisualDensity.compact,
+                ),
               IconeCategoria(
                 iconeCategoria: categoria?.icone,
                 corCategoria: corCategoria,
@@ -133,11 +148,18 @@ class CardFluxo extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  _buildBotaoBaixa(theme),
+                  // Baixar e o menu de ações somem enquanto se
+                  // seleciona: são ações de **um** lançamento, e um
+                  // alvo de toque desses no meio de uma lista de
+                  // caixas de marcação é um clique errado esperando
+                  // acontecer.
+                  if (selecionado == null) ...[
+                    const SizedBox(height: 2),
+                    _buildBotaoBaixa(theme),
+                  ],
                 ],
               ),
-              _buildMenu(theme, cores),
+              if (selecionado == null) _buildMenu(theme, cores),
             ],
           ),
         ),

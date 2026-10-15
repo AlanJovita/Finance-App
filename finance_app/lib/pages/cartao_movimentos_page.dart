@@ -14,7 +14,9 @@ import '../utils/currency_formatter.dart';
 import '../utils/meses.dart';
 import '../utils/ofx.dart';
 import '../utils/responsive_utils.dart';
+import '../models/edicao_lote.dart';
 import '../widgets/card_movimento_cartao.dart';
+import '../widgets/edicao_lote_dialog.dart';
 import '../widgets/importar_ofx_dialog.dart';
 import '../widgets/logo_bandeira.dart';
 import '../widgets/movimento_cartao_form_dialog.dart';
@@ -81,6 +83,22 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
   /// As competências que têm fatura — alimenta o atalho de meses, sem baixar os
   /// movimentos de nenhuma delas.
   List<ResumoFatura> _faturas = const [];
+
+  // ── seleção em lote ─────────────────────────────────────────────────────
+  //
+  // O mesmo desenho da lista de Receitas/Despesas, com um campo a menos: aqui o
+  // modal só oferece categoria e subcategoria, porque `id_conta` e `confirmado`
+  // não existem na tabela do cartão.
+
+  bool _modoSelecao = false;
+  final Set<int> _selecionados = {};
+
+  /// Os marcados que ainda estão na fatura em foco. Trocar de fatura com a
+  /// seleção ligada não pode levar ids da fatura anterior junto.
+  List<int> get _idsSelecionados => [
+    for (final m in _movimentos)
+      if (_selecionados.contains(m.id)) m.id,
+  ];
 
   Map<int, Categoria> _categorias = const {};
   Map<int, Subcategoria> _subcategorias = const {};
@@ -668,8 +686,12 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
           // novo lançamento: numa fatura fechada a API rolaria tudo para a
           // próxima aberta, e uma importação que vai para outro mês é pior que
           // uma importação indisponível.
-          if (podeLancar)
-            IconButton(
+          // A fatura fechada não aceita escrita nenhuma, e a API recusa o
+          // lote: oferecer a seleção ali levaria a uma alteração que não
+          // acontece.
+          if (podeLancar) _botaoLoteBarra(),
+          if (podeLancar)
+            IconButton(
               onPressed: _importando ? null : _importarOfx,
               tooltip: 'Importar extrato OFX',
               icon:
@@ -691,8 +713,80 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
                 tooltip: 'Novo lançamento',
                 child: const Icon(Icons.add),
               ),
-      body: Column(children: [_navegador(), Expanded(child: _corpo())]),
+      body: Column(
+        children: [
+          _navegador(),
+          if (_modoSelecao) _barraSelecao(),
+          Expanded(child: _corpo()),
+        ],
+      ),
       bottomNavigationBar: _detalhe == null ? null : _rodape(),
+    );
+  }
+
+  /// O botão de alteração em lote, na barra de título.
+  ///
+  /// Mesma mecânica de dois toques da lista de Receitas/Despesas; aqui ele mora
+  /// na `AppBar` porque esta tela não tem barra de filtros, só o navegador de
+  /// fatura.
+  Widget _botaoLoteBarra() {
+    final selecionados = _modoSelecao ? _idsSelecionados.length : 0;
+    final podeAbrir = !_modoSelecao || selecionados > 0;
+
+    return IconButton(
+      onPressed: podeAbrir ? _botaoLote : null,
+      tooltip: _modoSelecao
+          ? (selecionados > 0
+                ? 'Alterar $selecionados selecionado'
+                      '${selecionados == 1 ? '' : 's'}'
+                : 'Marque ao menos um lançamento')
+          : 'Alterar em lote',
+      isSelected: _modoSelecao,
+      icon: Icon(_modoSelecao ? Icons.edit_note : Icons.checklist),
+    );
+  }
+
+  /// A faixa de seleção: a contagem que o modal vai confirmar, e a saída.
+  Widget _barraSelecao() {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+
+    final visiveis = _movimentos.length;
+    final marcados = _idsSelecionados.length;
+    final todos = visiveis > 0 && marcados == visiveis;
+
+    return Material(
+      color: cores.info.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                marcados == 0
+                    ? 'Nenhum lançamento selecionado'
+                    : '$marcados de $visiveis selecionado'
+                          '${marcados == 1 ? '' : 's'}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            if (visiveis > 0)
+              TextButton(
+                onPressed: _alternarTodos,
+                child: Text(todos ? 'Limpar' : 'Marcar todos'),
+              ),
+            IconButton(
+              onPressed: _sairDaSelecao,
+              tooltip: 'Sair da seleção',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -938,6 +1032,119 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
     );
   }
 
+  // ------------------------------------------------------ edição em lote
+
+  /// Primeiro toque liga a seleção; segundo abre o modal.
+  void _botaoLote() {
+    if (!_modoSelecao) {
+      setState(() {
+        _modoSelecao = true;
+        _selecionados.clear();
+      });
+      return;
+    }
+
+    _abrirEdicaoLote();
+  }
+
+  void _sairDaSelecao() {
+    setState(() {
+      _modoSelecao = false;
+      _selecionados.clear();
+    });
+  }
+
+  void _alternarSelecao(MovimentoCartao movimento) {
+    setState(() {
+      if (!_selecionados.remove(movimento.id)) _selecionados.add(movimento.id);
+    });
+  }
+
+  void _alternarTodos() {
+    final ids = [for (final m in _movimentos) m.id];
+
+    setState(() {
+      if (ids.every(_selecionados.contains)) {
+        _selecionados.removeAll(ids);
+      } else {
+        _selecionados.addAll(ids);
+      }
+    });
+  }
+
+  Future<void> _abrirEdicaoLote() async {
+    final ids = _idsSelecionados;
+    if (ids.isEmpty) return;
+
+    final alteracao = await pedirAlteracaoLote(
+      context,
+      quantidade: ids.length,
+      // Só os dois que existem no cartão.
+      campos: CampoLote.doCartao,
+      categorias: _categorias.values.where((c) => c.tipoFluxo == 2).toList(),
+      subcategorias: _subcategorias.values.toList(),
+    );
+
+    if (alteracao == null || !mounted) return;
+
+    try {
+      final resultado = await _apiService.updateMovimentoCartaoLote(
+        ids,
+        alteracao.corpo,
+      );
+
+      if (!mounted) return;
+
+      _sairDaSelecao();
+      await _carregar();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_mensagemLote(resultado)),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e, s) {
+      await _logger.logError(
+        'CartaoMovimentosPage._abrirEdicaoLote',
+        e,
+        stackTrace: s,
+        additionalInfo: {
+          'quantidade': ids.length,
+          'campos': alteracao.corpo.keys.toList(),
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Erro ao alterar em lote: $e')));
+    }
+  }
+
+  /// A API recusa lançamento de fatura fechada **em silêncio** — ele fica de
+  /// fora do UPDATE. É a diferença entre `selecionados` e `atualizados` que
+  /// permite avisar, em vez de relatar sucesso de algo que não aconteceu.
+  String _mensagemLote(ResultadoLote resultado) {
+    final n = resultado.atualizados;
+
+    if (n == 0) {
+      return resultado.houveRecusa
+          ? 'Nada foi alterado: a fatura destes lançamentos já foi fechada.'
+          : 'Nenhum lançamento precisou ser alterado.';
+    }
+
+    final alvo = n == 1 ? '1 lançamento' : '$n lançamentos';
+    final base = '$alvo alterado${n == 1 ? '' : 's'}';
+
+    if (!resultado.houveRecusa) return '$base.';
+
+    final fora = resultado.selecionados - n;
+    return '$base. $fora ficou${fora == 1 ? '' : 'ram'} de fora '
+        '(fatura fechada ou já com esse valor).';
+  }
+
   Widget _card(MovimentoCartao movimento) {
     final fatura = _fatura;
 
@@ -948,6 +1155,10 @@ class _CartaoMovimentosPageState extends State<CartaoMovimentosPage> {
       faturaFechada: fatura != null && !fatura.aberta,
       onEditar: () => _abrirFormulario(movimento: movimento),
       onExcluir: () => _excluir(movimento),
+      selecionado: _modoSelecao
+          ? _selecionados.contains(movimento.id)
+          : null,
+      onAlternarSelecao: () => _alternarSelecao(movimento),
     );
   }
 
