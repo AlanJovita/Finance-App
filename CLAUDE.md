@@ -131,23 +131,14 @@ API os recusa, e não oferecer a replicação quando foi *só* a data que mudou 
 algo que não teria efeito. O modal pergunta no momento de salvar, antes do spinner, e
 `null` do `_perguntarReplicar` é "cancelei a edição", diferente de `false`.
 
-**Dois arranjos por tela, e um número só decide** (`AppLayout.duasColunas`,
-1100px, em `utils/app_tokens.dart`): acima dele as Receitas/Despesas põem o
-formulário **fixo na lateral** (`ApresentacaoFluxo.painel`) e o Resumo se parte
-em duas pilhas; abaixo, as duas voltam à coluna única com modal e botão
-flutuante. O número é compartilhado de propósito — com um limiar por tela haveria
-uma faixa de larguras em que uma já virou duas colunas e a outra não.
-
-No modo painel da lista, três coisas mudam juntas e as três têm o mesmo motivo
-("não há modal"): o botão flutuante some (ele abriria um modal por cima de um
-formulário já aberto), o resumo do mês desce para dentro da coluna da lista (ele
-soma **a lista**, e esticado por baixo do formulário pareceria somar os dois), e
-os três botões do formulário viram dois — "Salvar" já grava e segue, e o lugar
-do "Cancelar" é de "Limpar". Quem decide a vida do painel é a página: a `key`
-dele carrega o alvo em foco e um contador (`_painelGeracao`), e é essa `key` que
-recria o `State` quando o alvo muda — sem ela, os campos da edição anterior
-ficariam lá. Gravar com "continuar" **não** mexe no contador, que é justamente o
-caso em que o formulário tem de sobreviver.
+**A lista de lançamentos tem um arranjo só, em qualquer largura**: lista em
+largura cheia, resumo do mês como `bottomNavigationBar` e lançamento pelo modal
+do botão flutuante. Houve uma versão em que, acima de 1100px, ela virava "lista +
+formulário fixo na lateral" (com o botão flutuante escondido, o resumo descido
+para dentro da coluna e um `ApresentacaoFluxo.painel` no `FluxoFormDialog`);
+**foi revertido por decisão de produto** — não tente reintroduzir sem pedido.
+`test/salvar_continuar_test.dart` e `test/lista_fluxos_golden_test.dart` travam a
+forma atual numa tela de 1300px, que é justamente onde a variante aparecia.
 
 **O card da lista diz quatro coisas, e o lugar de cada uma é decisão**
 (`CardFluxo`): a marca à esquerda é a categoria com um **selo de situação**
@@ -353,13 +344,38 @@ cada bloco é a **ausência de dado**, não uma configuração: `getCaixa()` dev
 quando a loja nunca abriu caixa, e `ResumoPainel.vazio` diz que nunca houve lançamento.
 Ordem fixa quando os dois existem: caixa primeiro.
 
-Quatro coisas ali não são inferíveis do código.
+Cinco coisas ali não são inferíveis do código.
 
-**Os dois pedaços do caixa não ficam contíguos de propósito.** O card do último caixa está
-no topo e os gráficos de faturamento/pedidos ficam depois dos boletos e dos atalhos —
-exatamente onde estavam antes desta tela ganhar o segundo resumo. Agrupá-los empurraria o
-aviso de boleto vencendo para baixo de dois gráficos. **Boleto fica fora do bloco do
-caixa**: é cobrança do ERP, e uma loja sem caixa ainda pode ter boleto vencendo.
+**A tela é uma grade de cards soltos, em 1, 2 ou 3 colunas** (`GradeCartoes`, em
+`widgets/grade_cartoes.dart`; a contagem sai de `AppLayout.colunasResumo`, com os limiares
+em 720 e 1500px sobre a largura **da tela**). Três decisões moram aí:
+
+- **Largura decide, não orientação.** O pedido original era "em pé uma coluna, deitado
+  duas", mas no navegador "orientação" não diz nada sobre quanto espaço existe — uma janela
+  estreitada continua paisagem. Os limiares foram escolhidos para dar o mesmo resultado nos
+  aparelhos (celular em pé ≈390 → 1; deitado ≈844 → 2) com a consequência aceita de que
+  tablet **em pé** (≈800) também ganha duas.
+- **Todo card é peça solta.** Não existem mais "bloco do caixa" e "bloco de movimentações"
+  como unidades de layout: os dois gráficos mensais (`CartaoGraficoMensal`, um por
+  `GraficoMensal`) e os cinco cards de movimentações (`CartaoSaldos`, `CartaoNatureza` ×2,
+  `CartaoCategorias` ×2, em `widgets/cartoes_movimentacoes.dart`) entram na grade um a um.
+  Eram esses dois agrupamentos que faziam uma coluna ficar com 1800px e a outra com 300 — a
+  grade só equilibra o que recebe em pedaços. Como não há mais cabeçalho de seção, o título
+  "Movimentações" e o mês passaram para dentro do `CartaoSaldos`.
+- **A grade é um `RenderBox` próprio, não `GridView` nem `Row` de `Column`s.** `GridView`
+  impõe a altura do maior card a toda a linha; uma divisão fixa em colunas precisaria
+  decidir antes quem vai onde, e a altura de cada card depende dos dados da loja. O layout
+  mede cada filho com a largura da coluna e o põe na coluna mais curta — varredura gulosa,
+  uma passada. O empate cai na coluna mais à esquerda, e é isso que faz os primeiros cards
+  serem sempre os topos das colunas, na ordem da lista. `test/grade_resumo_test.dart` trava
+  os limiares e a distribuição.
+
+**Os dois pedaços do caixa não ficam contíguos de propósito.** Na ordem da lista o card do
+último caixa vem primeiro e os gráficos de faturamento/pedidos vêm depois dos boletos e dos
+atalhos — e como a grade respeita a ordem nos primeiros cards, isso continua valendo com
+qualquer número de colunas. Agrupá-los empurraria o aviso de boleto vencendo para baixo de
+dois gráficos. **Boleto fica fora do bloco do caixa**: é cobrança do ERP, e uma loja sem
+caixa ainda pode ter boleto vencendo.
 
 **O caminho para a tela de Caixas some junto com o bloco**, nos dois lugares: o atalho do
 painel e o item do menu lateral (`AppDrawer`). Sem caixa os dois levavam a uma tela

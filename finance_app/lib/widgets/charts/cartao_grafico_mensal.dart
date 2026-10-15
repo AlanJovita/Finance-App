@@ -19,19 +19,42 @@ import 'legenda_chart.dart';
 ///
 /// **A média é linha de referência, não série:** ela é base de comparação, e
 /// desenhá-la como série competiria com o destaque.
-class MonthlyChartsWidget extends StatefulWidget {
+///
+/// **Um card por gráfico, não os dois num só.** Eles são irmãos e vinham
+/// grudados numa `Column`, mas no Resumo cada card é peça solta de uma grade
+/// que os distribui pela coluna mais curta (`GradeCartoes`) — um bloco de dois
+/// gráficos ocuparia 600px de uma coluna só e desequilibraria a tela.
+enum GraficoMensal {
+  faturamento,
+  pedidos;
+
+  String get titulo => switch (this) {
+    GraficoMensal.faturamento => 'Faturamento Mensal',
+    GraficoMensal.pedidos => 'Pedidos Mensais',
+  };
+}
+
+class CartaoGraficoMensal extends StatefulWidget {
   final List<RelatorioMensal> relatorios;
 
-  const MonthlyChartsWidget({super.key, required this.relatorios});
+  /// Qual dos dois: os dois leem o mesmo relatório e só diferem no campo que
+  /// olham e em como formatam.
+  final GraficoMensal grafico;
+
+  const CartaoGraficoMensal({
+    super.key,
+    required this.relatorios,
+    required this.grafico,
+  });
 
   /// Quantos meses a tela mostra.
   static const int mesesExibidos = 6;
 
   @override
-  State<MonthlyChartsWidget> createState() => _MonthlyChartsWidgetState();
+  State<CartaoGraficoMensal> createState() => _CartaoGraficoMensalState();
 }
 
-class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
+class _CartaoGraficoMensalState extends State<CartaoGraficoMensal>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -67,52 +90,55 @@ class _MonthlyChartsWidgetState extends State<MonthlyChartsWidget>
       return porAno != 0 ? porAno : (a.mes ?? 0).compareTo(b.mes ?? 0);
     });
 
-    if (ordenados.length <= MonthlyChartsWidget.mesesExibidos) return ordenados;
+    if (ordenados.length <= CartaoGraficoMensal.mesesExibidos) {
+      return ordenados;
+    }
     return ordenados.sublist(
-      ordenados.length - MonthlyChartsWidget.mesesExibidos,
+      ordenados.length - CartaoGraficoMensal.mesesExibidos,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     if (widget.relatorios.isEmpty) {
-      return const Card(
+      // Guarda, não estado de tela: o Resumo só monta este card quando há
+      // relatório. Nomeia o gráfico porque os dois cards são irmãos e dois
+      // avisos idênticos lado a lado não diriam qual é qual.
+      return Card(
         elevation: AppElevation.none,
         child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text('Nenhum dado disponível para exibir gráficos'),
+          padding: const EdgeInsets.all(16.0),
+          child: Text('Sem dados para ${widget.grafico.titulo}'),
         ),
       );
     }
 
     final meses = _meses;
+    final subtitulo = 'Últimos ${meses.length} meses e média do período';
 
-    return Column(
-      children: [
-        _buildGrafico(
-          context,
-          titulo: 'Faturamento Mensal',
-          subtitulo: 'Últimos ${meses.length} meses e média do período',
-          meses: meses,
-          valorDe: (r) => r.somaSaldo ?? 0,
-          formatar: CurrencyFormatter.format,
-          formatarEixo: (v) => 'R\$ ${CurrencyFormatter.compacto(v)}',
-        ),
-        const SizedBox(height: 16),
-        _buildGrafico(
-          context,
-          titulo: 'Pedidos Mensais',
-          subtitulo: 'Últimos ${meses.length} meses e média do período',
-          meses: meses,
-          valorDe: (r) => r.somaPedidosConfirmados ?? 0,
-          formatar: (v) => v.round().toString(),
-          formatarEixo: (v) => v.round().toString(),
-          // Estornados saíram do desenho: como série competiam com o destaque,
-          // e o número bruto responde melhor "quantos foram".
-          rodape: _estornados(meses),
-        ),
-      ],
-    );
+    return switch (widget.grafico) {
+      GraficoMensal.faturamento => _buildGrafico(
+        context,
+        titulo: widget.grafico.titulo,
+        subtitulo: subtitulo,
+        meses: meses,
+        valorDe: (r) => r.somaSaldo ?? 0,
+        formatar: CurrencyFormatter.format,
+        formatarEixo: (v) => 'R\$ ${CurrencyFormatter.compacto(v)}',
+      ),
+      GraficoMensal.pedidos => _buildGrafico(
+        context,
+        titulo: widget.grafico.titulo,
+        subtitulo: subtitulo,
+        meses: meses,
+        valorDe: (r) => r.somaPedidosConfirmados ?? 0,
+        formatar: (v) => v.round().toString(),
+        formatarEixo: (v) => v.round().toString(),
+        // Estornados saíram do desenho: como série competiam com o destaque, e
+        // o número bruto responde melhor "quantos foram".
+        rodape: _estornados(meses),
+      ),
+    };
   }
 
   String? _estornados(List<RelatorioMensal> meses) {

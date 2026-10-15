@@ -12,8 +12,9 @@ import 'package:finance_app/services/logger_service.dart';
 import 'package:finance_app/utils/auth_actions.dart';
 import 'package:finance_app/utils/currency_formatter.dart';
 import 'package:finance_app/widgets/boletos_widget.dart';
-import 'package:finance_app/widgets/charts/monthly_charts_widget.dart';
-import 'package:finance_app/widgets/resumo_movimentacoes_widget.dart';
+import 'package:finance_app/widgets/cartoes_movimentacoes.dart';
+import 'package:finance_app/widgets/charts/cartao_grafico_mensal.dart';
+import 'package:finance_app/widgets/grade_cartoes.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -248,46 +249,73 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  /// Os blocos do painel, montados uma vez e empilhados conforme a largura.
+  /// Os cards do Resumo, montados uma vez e distribuídos pela
+  /// [GradeCartoes] em 1, 2 ou 3 colunas conforme a largura da tela
+  /// ([AppLayout.colunasResumo]).
   ///
-  /// **Numa coluna, a ordem é a de sempre**: caixa, boletos, atalhos, gráficos,
-  /// movimentações. Os dois pedaços do caixa não ficam contíguos de propósito —
-  /// boletos e atalhos continuam entre eles, porque agrupá-los empurraria o
-  /// aviso de boleto vencendo para baixo de dois gráficos.
+  /// **Todo card é peça solta.** Não há mais "bloco do caixa" e "bloco de
+  /// movimentações" como unidades de layout: os dois gráficos mensais e os cinco
+  /// cards de movimentações entram aqui individualmente. Eram justamente esses
+  /// dois agrupamentos que faziam uma coluna ficar com 1800px de altura e a
+  /// outra com 300 — a grade só consegue equilibrar o que recebe em pedaços.
   ///
-  /// **Em duas colunas, o que essa regra protege continua protegido**: o boleto
-  /// é o primeiro item da coluna da direita, acima da dobra e sem rolagem. O
-  /// que muda é só que ele deixa de disputar a vertical com o resto. A coluna
-  /// esquerda fica com os dois blocos densos (caixa e movimentações) e a
-  /// direita com os curtos (boleto, atalhos, gráficos), que é o que aproxima as
-  /// duas alturas — e não há como fazê-las iguais, porque cada loja tem uma
-  /// combinação diferente de blocos presentes.
+  /// **A ordem desta lista ainda decide o essencial**, porque a grade põe os
+  /// primeiros cards no topo de cada coluna, na ordem recebida, e só distribui o
+  /// resto por altura. É a mesma ordem de sempre numa coluna: caixa, boletos,
+  /// atalhos, gráficos do caixa, e depois as movimentações. Os dois pedaços do
+  /// caixa continuam não contíguos de propósito — boletos e atalhos ficam entre
+  /// eles, porque agrupá-los empurraria o aviso de boleto vencendo para baixo
+  /// de dois gráficos.
   Widget _buildConteudo(BuildContext context) {
     final espaco = context.responsiveSpacing();
-    final duasColunas =
-        MediaQuery.sizeOf(context).width >= AppLayout.duasColunas;
+    final colunas = AppLayout.colunasResumo(MediaQuery.sizeOf(context).width);
+    final painel = _painel;
 
-    final caixa = _caixa == null ? null : _buildMainCard(context, _caixa!);
-    final boletos = _boletos.isEmpty ? null : BoletosWidget(boletos: _boletos);
-    final atalhos = _buildActionCardsRow(context);
-    // Faturamento e pedidos saem do caixa: sem caixa eles seriam dois gráficos
-    // vazios.
-    final graficos =
-        _temCaixa && _relatoriosMensais.isNotEmpty
-            ? MonthlyChartsWidget(relatorios: _relatoriosMensais)
-            : null;
-    final movimentacoes =
-        _temMovimentacoes
-            ? ResumoMovimentacoesWidget(
-              painel: _painel!,
-              categorias: _categorias,
-            )
-            : null;
+    final cartoes = <Widget>[
+      if (_caixa != null) _buildMainCard(context, _caixa!),
+      if (_boletos.isNotEmpty) BoletosWidget(boletos: _boletos),
+      _buildActionCardsRow(context),
 
-    // Um bloco que falhou avisa no lugar dele, em vez de sumir — sumir é o que
-    // o painel faz quando a loja de fato não tem o dado, e os dois casos não
-    // podem parecer iguais.
-    final avisos = <Widget>[
+      // Faturamento e pedidos saem do caixa: sem caixa seriam dois gráficos
+      // vazios.
+      if (_temCaixa && _relatoriosMensais.isNotEmpty) ...[
+        CartaoGraficoMensal(
+          relatorios: _relatoriosMensais,
+          grafico: GraficoMensal.faturamento,
+        ),
+        CartaoGraficoMensal(
+          relatorios: _relatoriosMensais,
+          grafico: GraficoMensal.pedidos,
+        ),
+      ],
+
+      if (_temMovimentacoes && painel != null) ...[
+        CartaoSaldos(painel: painel),
+        CartaoNatureza(
+          painel: painel,
+          categorias: _categorias,
+          ehReceita: true,
+        ),
+        CartaoNatureza(
+          painel: painel,
+          categorias: _categorias,
+          ehReceita: false,
+        ),
+        CartaoCategorias(
+          painel: painel,
+          categorias: _categorias,
+          ehReceita: true,
+        ),
+        CartaoCategorias(
+          painel: painel,
+          categorias: _categorias,
+          ehReceita: false,
+        ),
+      ],
+
+      // Um bloco que falhou avisa no lugar dele, em vez de sumir — sumir é o
+      // que o Resumo faz quando a loja de fato não tem o dado, e os dois casos
+      // não podem parecer iguais.
       if (_erroCaixa != null)
         _buildFalhaBloco('Não foi possível carregar o resumo do caixa.'),
       if (_erroMovimentacoes != null)
@@ -299,64 +327,15 @@ class _DashboardPageState extends State<DashboardPage> {
         _buildSemDados(context),
     ];
 
-    if (!duasColunas) {
-      return _pilha(espaco, [
-        caixa,
-        boletos,
-        atalhos,
-        graficos,
-        if (movimentacoes != null) ...[
-          // O resumo de movimentações é outro assunto, não o próximo item da
-          // mesma lista: o respiro maior é o que separa os dois.
-          const SizedBox(height: AppSpacing.xl),
-          movimentacoes,
-        ],
-        ...avisos,
-      ]);
-    }
-
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: AppLayout.conteudoMaximo),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 3,
-              child: _pilha(espaco, [caixa, movimentacoes, ...avisos]),
-            ),
-            SizedBox(width: espaco),
-            Expanded(
-              flex: 2,
-              child: _pilha(espaco, [boletos, atalhos, graficos]),
-            ),
-          ],
+        child: GradeCartoes(
+          colunas: colunas,
+          espaco: espaco,
+          cartoes: cartoes,
         ),
       ),
-    );
-  }
-
-  /// Empilha o que existe, com respiro só **entre** os blocos.
-  ///
-  /// Os nulos caem fora aqui, e não em cada chamada: é o que permite montar os
-  /// blocos uma vez e deixar o arranjo decidir a ordem, sem repetir o `if` de
-  /// existência de cada um nas duas composições.
-  Widget _pilha(double espaco, List<Widget?> blocos) {
-    final presentes = blocos.whereType<Widget>().toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < presentes.length; i++) ...[
-          // O respiro pula quando um dos dois lados já é um espaçador
-          // explícito — é o caso do corte maior antes das movimentações.
-          if (i > 0 &&
-              presentes[i] is! SizedBox &&
-              presentes[i - 1] is! SizedBox)
-            SizedBox(height: espaco),
-          presentes[i],
-        ],
-      ],
     );
   }
 

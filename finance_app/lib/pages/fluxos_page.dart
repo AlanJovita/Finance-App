@@ -141,31 +141,6 @@ class _FluxosPageState extends State<FluxosPage> {
   Map<int, Categoria> _categorias = {};
   Map<int, Subcategoria> _subcategorias = {};
 
-  // ── formulário fixo na lateral ──────────────────────────────────────────
-  //
-  // Em tela larga o lançamento não é modal: o formulário fica encostado à
-  // direita, sempre visível, e "abrir o formulário" passa a ser trocar o que
-  // está em foco nele. Abaixo de [AppLayout.duasColunas] nada disso existe e a
-  // tela volta ao botão flutuante + modal.
-
-  /// O lançamento em foco no painel. `null` é "novo".
-  FluxoCaixa? _formPainel;
-  bool _clonarPainel = false;
-
-  /// Entra na `key` do painel: trocar o alvo (ou pedir para limpar) precisa
-  /// **recriar** o `State` do formulário, senão os campos da edição anterior
-  /// ficam lá. Gravar com "continuar" não mexe nisto — é justamente o caso em
-  /// que o formulário tem de sobreviver.
-  int _painelGeracao = 0;
-
-  /// Cabe a lista **e** o formulário ao lado?
-  ///
-  /// Lido do `MediaQuery` a cada uso, e não guardado: a janela de um navegador
-  /// muda de tamanho, e um booleano calculado uma vez deixaria a tela no
-  /// arranjo errado depois do primeiro redimensionamento.
-  bool get _comPainel =>
-      MediaQuery.sizeOf(context).width >= AppLayout.duasColunas;
-
   TipoFluxo get _tipo => widget.tipo;
 
   /// Lado do botão quadrado e altura dos controles da barra. O atalho de
@@ -449,22 +424,7 @@ class _FluxosPageState extends State<FluxosPage> {
 
   /// Abre o formulário: sem [fluxo] para criar, com ele para editar, e com
   /// [clonar] para criar a partir de um molde já preenchido.
-  ///
-  /// Em tela larga não abre nada: troca o que o painel da lateral está
-  /// mostrando. O resto da tela — card, menu, botão — não precisa saber em qual
-  /// dos dois arranjos está.
   void _showFormDialog({FluxoCaixa? fluxo, bool clonar = false}) {
-    if (_comPainel) {
-      setState(() {
-        _formPainel = fluxo;
-        _clonarPainel = clonar;
-        // Sempre: pedir o mesmo alvo de novo (ou um novo lançamento com o
-        // painel já preenchido) tem de dar um formulário limpo.
-        _painelGeracao++;
-      });
-      return;
-    }
-
     showDialog(
       context: context,
       builder: (context) {
@@ -487,7 +447,7 @@ class _FluxosPageState extends State<FluxosPage> {
     );
   }
 
-  /// Atualiza a tela e confirma a gravação — o mesmo nos dois arranjos.
+  /// Atualiza a tela e confirma a gravação.
   ///
   /// A tela recarrega em toda gravação, inclusive nas que mantêm o formulário
   /// aberto: é a única confirmação visível de que a anterior entrou. A mensagem
@@ -505,10 +465,6 @@ class _FluxosPageState extends State<FluxosPage> {
   }) {
     _recarregarApos(vencimento);
 
-    // No painel, terminar uma edição devolve o formulário em branco: a edição
-    // acabou, e deixá-la na tela sugeriria que ainda há algo pendente nela.
-    if (ehEdicao && _comPainel) _limparPainel();
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
@@ -525,39 +481,6 @@ class _FluxosPageState extends State<FluxosPage> {
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
-    );
-  }
-
-  /// Devolve o painel ao estado de lançamento novo, em branco.
-  void _limparPainel() {
-    setState(() {
-      _formPainel = null;
-      _clonarPainel = false;
-      _painelGeracao++;
-    });
-  }
-
-  /// O formulário da lateral.
-  ///
-  /// A `key` é o que faz o `State` ser recriado quando o alvo muda — ver
-  /// [_painelGeracao].
-  Widget _buildPainelFormulario() {
-    final fluxo = _formPainel;
-
-    return FluxoFormDialog(
-      key: ValueKey('painel-${fluxo?.id ?? 0}-$_clonarPainel-$_painelGeracao'),
-      tipoFluxo: _tipo.tipoDialogo,
-      fluxo: fluxo,
-      clonar: _clonarPainel,
-      apresentacao: ApresentacaoFluxo.painel,
-      onFechar: _limparPainel,
-      onSave:
-          (vencimento, parcelasReplicadas) => _aposSalvar(
-            vencimento,
-            parcelasReplicadas,
-            ehEdicao: fluxo != null && !_clonarPainel,
-            clonar: _clonarPainel,
-          ),
     );
   }
 
@@ -747,55 +670,29 @@ class _FluxosPageState extends State<FluxosPage> {
 
   @override
   Widget build(BuildContext context) {
-    final comPainel = _comPainel;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(_tipo.titulo),
         actions: [_buildBotaoDetalhes()],
       ),
       drawer: const AppDrawer(),
-      body: Row(
-        children: [
-          Expanded(
-            child: Column(
-              children: [
-                _buildBarraFiltros(),
-                Expanded(child: _buildLista()),
-                // Com o painel ao lado, o resumo do mês desce para dentro da
-                // coluna da lista: ele soma **a lista**, e esticá-lo por baixo
-                // do formulário faria os totais parecerem do painel também. Sem
-                // painel ele continua barra do Scaffold, que é o que mantém o
-                // botão flutuante acima dele em vez de tapando os totais.
-                if (comPainel) _buildResumoRodape(),
-              ],
-            ),
-          ),
-          if (comPainel) ...[
-            const VerticalDivider(width: 1),
-            SizedBox(
-              width: AppLayout.painelLateral,
-              child: _buildPainelFormulario(),
-            ),
-          ],
-        ],
+      body: Column(
+        children: [_buildBarraFiltros(), Expanded(child: _buildLista())],
       ),
-      bottomNavigationBar: comPainel ? null : _buildResumoRodape(),
-      // Sem botão flutuante quando o formulário já está na tela: ele abriria
-      // um modal por cima de um formulário aberto.
-      floatingActionButton:
-          comPainel
-              ? null
-              : FloatingActionButton(
-                onPressed: () => _showFormDialog(),
-                tooltip: 'Nova ${_tipo.singular}',
-                backgroundColor: _tipo.cor(context.appColors),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: const Icon(Icons.add),
-              ),
+      // O resumo é barra do `Scaffold`, e não o último item da coluna: é isso
+      // que mantém o botão flutuante **acima** dele em vez de tapando os
+      // totais.
+      bottomNavigationBar: _buildResumoRodape(),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showFormDialog(),
+        tooltip: 'Nova ${_tipo.singular}',
+        backgroundColor: _tipo.cor(context.appColors),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
+        child: const Icon(Icons.add),
+      ),
     );
   }
 
