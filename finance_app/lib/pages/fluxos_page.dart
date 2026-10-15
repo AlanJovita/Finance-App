@@ -18,6 +18,7 @@ import '../utils/meses.dart';
 import '../utils/responsive_utils.dart';
 import '../utils/situacao_fluxo.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/moldura_menu.dart';
 import '../widgets/card_fluxo.dart';
 import '../widgets/detalhes_mes_dialog.dart';
 import '../widgets/fluxo_form_dialog.dart';
@@ -358,8 +359,9 @@ class _FluxosPageState extends State<FluxosPage> {
   /// Categorias que o filtro oferece: só as da natureza desta tela, porque uma
   /// despesa nunca cairia numa categoria de receita.
   List<Categoria> get _categoriasDoTipo {
-    final lista =
-        _categorias.values.where((c) => c.tipoFluxo == _tipo.codigo).toList();
+    final lista = _categorias.values
+        .where((c) => c.tipoFluxo == _tipo.codigo)
+        .toList();
     lista.sort((a, b) => a.descricao.compareTo(b.descricao));
     return lista;
   }
@@ -435,13 +437,12 @@ class _FluxosPageState extends State<FluxosPage> {
           // Quem fecha o modal é ele mesmo: no "salvar e continuar" ele grava e
           // **fica aberto** para o próximo lançamento, e só ele sabe qual dos
           // dois botões foi tocado.
-          onSave:
-              (vencimento, parcelasReplicadas) => _aposSalvar(
-                vencimento,
-                parcelasReplicadas,
-                ehEdicao: fluxo != null && !clonar,
-                clonar: clonar,
-              ),
+          onSave: (vencimento, parcelasReplicadas) => _aposSalvar(
+            vencimento,
+            parcelasReplicadas,
+            ehEdicao: fluxo != null && !clonar,
+            clonar: clonar,
+          ),
         );
       },
     );
@@ -470,12 +471,12 @@ class _FluxosPageState extends State<FluxosPage> {
         content: Text(
           !ehEdicao
               ? '${_tipo.singular[0].toUpperCase()}'
-                  '${_tipo.singular.substring(1)} '
-                  '${clonar ? 'duplicada' : 'criada'}.'
+                    '${_tipo.singular.substring(1)} '
+                    '${clonar ? 'duplicada' : 'criada'}.'
               : parcelasReplicadas > 0
               ? 'Alterações salvas e replicadas para '
-                  '$parcelasReplicadas '
-                  '${parcelasReplicadas == 1 ? 'parcela' : 'parcelas'}.'
+                    '$parcelasReplicadas '
+                    '${parcelasReplicadas == 1 ? 'parcela' : 'parcelas'}.'
               : 'Alterações salvas.',
         ),
         behavior: SnackBarBehavior.floating,
@@ -487,9 +488,8 @@ class _FluxosPageState extends State<FluxosPage> {
   Future<void> _darBaixa(FluxoCaixa fluxo) async {
     final confirmou = await showDialog<bool>(
       context: context,
-      builder:
-          (context) =>
-              PagamentoDialog(fluxo: fluxo, ehReceita: _tipo.ehReceita),
+      builder: (context) =>
+          PagamentoDialog(fluxo: fluxo, ehReceita: _tipo.ehReceita),
     );
 
     if (confirmou == true) {
@@ -512,25 +512,24 @@ class _FluxosPageState extends State<FluxosPage> {
   Future<void> _estornar(FluxoCaixa fluxo) async {
     final confirmou = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Estornar baixa'),
-            content: Text(
-              'Desfazer a confirmação de "${fluxo.descricao}"?\n\n'
-              'O valor atual é mantido: encargos e descontos aplicados na '
-              'baixa não são revertidos.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancelar'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Estornar'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Estornar baixa'),
+        content: Text(
+          'Desfazer a confirmação de "${fluxo.descricao}"?\n\n'
+          'O valor atual é mantido: encargos e descontos aplicados na '
+          'baixa não são revertidos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
           ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Estornar'),
+          ),
+        ],
+      ),
     );
 
     if (confirmou != true) return;
@@ -575,54 +574,46 @@ class _FluxosPageState extends State<FluxosPage> {
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => StatefulBuilder(
-            builder:
-                (context, setStateDialog) => AlertDialog(
-                  title: const Text('Confirmar exclusão'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Deseja realmente excluir "${fluxo.descricao}"?'),
-                      if (ehParcelamento) ...[
-                        const SizedBox(height: AppSpacing.sm),
-                        CheckboxListTile(
-                          value: excluirGrupo,
-                          onChanged:
-                              (marcado) => setStateDialog(
-                                () => excluirGrupo = marcado ?? false,
-                              ),
-                          // `titulo` é o plural da tela ("Receitas"/"Despesas").
-                          title: Text(
-                            'Excluir todas as ${_tipo.titulo.toLowerCase()} '
-                            'deste parcelamento',
-                          ),
-                          subtitle: const Text(
-                            'Inclui as parcelas de outros meses.',
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
-                        ),
-                      ],
-                    ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          title: const Text('Confirmar exclusão'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Deseja realmente excluir "${fluxo.descricao}"?'),
+              if (ehParcelamento) ...[
+                const SizedBox(height: AppSpacing.sm),
+                CheckboxListTile(
+                  value: excluirGrupo,
+                  onChanged: (marcado) =>
+                      setStateDialog(() => excluirGrupo = marcado ?? false),
+                  // `titulo` é o plural da tela ("Receitas"/"Despesas").
+                  title: Text(
+                    'Excluir todas as ${_tipo.titulo.toLowerCase()} '
+                    'deste parcelamento',
                   ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancelar'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: cores.error,
-                      ),
-                      child: const Text('Excluir'),
-                    ),
-                  ],
+                  subtitle: const Text('Inclui as parcelas de outros meses.'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
                 ),
+              ],
+            ],
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: cores.error),
+              child: const Text('Excluir'),
+            ),
+          ],
+        ),
+      ),
     );
 
     if (confirm != true) return;
@@ -656,13 +647,12 @@ class _FluxosPageState extends State<FluxosPage> {
   void _abrirDetalhes() {
     showDialog(
       context: context,
-      builder:
-          (context) => DetalhesMesDialog(
-            mesReferencia: _rotuloMes(_mes),
-            itens: _itensVisiveis,
-            ehReceita: _tipo.ehReceita,
-            filtroAtivo: _temFiltro,
-          ),
+      builder: (context) => DetalhesMesDialog(
+        mesReferencia: _rotuloMes(_mes),
+        itens: _itensVisiveis,
+        ehReceita: _tipo.ehReceita,
+        filtroAtivo: _temFiltro,
+      ),
     );
   }
 
@@ -670,14 +660,23 @@ class _FluxosPageState extends State<FluxosPage> {
 
   @override
   Widget build(BuildContext context) {
+    return MolduraMenu(
+      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, bool menuFixo) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_tipo.titulo),
         actions: [_buildBotaoDetalhes()],
       ),
-      drawer: const AppDrawer(),
+      drawer: menuFixo ? null : const AppDrawer(),
       body: Column(
-        children: [_buildBarraFiltros(), Expanded(child: _buildLista())],
+        children: [
+          _buildBarraFiltros(),
+          Expanded(child: _buildLista()),
+        ],
       ),
       // O resumo é barra do `Scaffold`, e não o último item da coluna: é isso
       // que mantém o botão flutuante **acima** dele em vez de tapando os
@@ -712,8 +711,8 @@ class _FluxosPageState extends State<FluxosPage> {
     // resultado lê como oliva apagado, não como destaque.
     final paleta =
         ThemeData.estimateBrightnessForColor(fundoBarra) == Brightness.dark
-            ? AppColors.dark
-            : AppColors.light;
+        ? AppColors.dark
+        : AppColors.light;
     final dourado = paleta.destaque;
 
     // O ícone contrasta com o dourado já misturado ao fundo da barra, não com o
@@ -724,8 +723,8 @@ class _FluxosPageState extends State<FluxosPage> {
     );
     final tinta =
         ThemeData.estimateBrightnessForColor(preenchimento) == Brightness.dark
-            ? Colors.white
-            : Colors.black87;
+        ? Colors.white
+        : Colors.black87;
 
     // Quadrado de 40 com a mesma margem direita da barra de filtros: assim ele
     // cai exatamente na vertical do botão de categoria, que fica uma linha
@@ -961,22 +960,21 @@ class _FluxosPageState extends State<FluxosPage> {
           minWidth: 36,
           minHeight: 36,
         ),
-        suffixIcon:
-            !mostraFechar
-                ? null
-                : IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: aoFechar == null ? 'Limpar busca' : 'Fechar busca',
-                  onPressed: () {
-                    if (aoFechar != null) {
-                      aoFechar();
-                      return;
-                    }
-                    _buscaController.clear();
-                    setState(() => _busca = '');
-                  },
-                ),
+        suffixIcon: !mostraFechar
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 16),
+                visualDensity: VisualDensity.compact,
+                tooltip: aoFechar == null ? 'Limpar busca' : 'Fechar busca',
+                onPressed: () {
+                  if (aoFechar != null) {
+                    aoFechar();
+                    return;
+                  }
+                  _buscaController.clear();
+                  setState(() => _busca = '');
+                },
+              ),
       ),
       // Filtro local sobre a lista já em memória: não há requisição por tecla,
       // então não precisa de debounce.
@@ -1065,30 +1063,28 @@ class _FluxosPageState extends State<FluxosPage> {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       onSelected: (id) => setState(() => _categoriaFiltro = id),
-      itemBuilder:
-          (context) => [
-            _itemFiltro(
-              valor: 0,
-              icone: Icons.clear_all,
-              corIcone: theme.colorScheme.onSurfaceVariant,
-              rotulo: 'Todas as categorias',
-            ),
-            if (_categoriasDoTipo.isNotEmpty) const PopupMenuDivider(),
-            for (final c in _categoriasDoTipo)
-              _itemFiltro(
-                valor: c.id!,
-                icone: CategoriaVisuais.icone(c.icone),
-                corIcone: CategoriaVisuais.cor(c.cor),
-                rotulo: c.descricao,
-              ),
-          ],
+      itemBuilder: (context) => [
+        _itemFiltro(
+          valor: 0,
+          icone: Icons.clear_all,
+          corIcone: theme.colorScheme.onSurfaceVariant,
+          rotulo: 'Todas as categorias',
+        ),
+        if (_categoriasDoTipo.isNotEmpty) const PopupMenuDivider(),
+        for (final c in _categoriasDoTipo)
+          _itemFiltro(
+            valor: c.id!,
+            icone: CategoriaVisuais.icone(c.icone),
+            corIcone: CategoriaVisuais.cor(c.cor),
+            rotulo: c.descricao,
+          ),
+      ],
       // Ativo, o quadrado mostra o ícone e a cor da própria categoria: é mais
       // direto que um ícone genérico de filtro aceso.
       child: _molduraFiltro(
-        icone:
-            ativa == null
-                ? Icons.local_offer_outlined
-                : CategoriaVisuais.icone(ativa.icone),
+        icone: ativa == null
+            ? Icons.local_offer_outlined
+            : CategoriaVisuais.icone(ativa.icone),
         ativo: ativa != null,
         corAtiva: ativa == null ? cores.info : CategoriaVisuais.cor(ativa.cor),
       ),
@@ -1114,12 +1110,12 @@ class _FluxosPageState extends State<FluxosPage> {
     final quantidade = _quantidadePorConta;
     final ativa = _contaFiltro;
 
-    final ids =
-        quantidade.keys.where((id) => id != 0).toList()..sort(
-          (a, b) => (_contas[a]?.descricao ?? '').compareTo(
-            _contas[b]?.descricao ?? '',
-          ),
-        );
+    final ids = quantidade.keys.where((id) => id != 0).toList()
+      ..sort(
+        (a, b) => (_contas[a]?.descricao ?? '').compareTo(
+          _contas[b]?.descricao ?? '',
+        ),
+      );
 
     return PopupMenuButton<int?>(
       tooltip: 'Filtrar por conta',
@@ -1128,35 +1124,34 @@ class _FluxosPageState extends State<FluxosPage> {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       onSelected: (id) => setState(() => _contaFiltro = id),
-      itemBuilder:
-          (context) => [
-            _itemFiltro<int?>(
-              valor: null,
-              icone: Icons.clear_all,
-              corIcone: theme.colorScheme.onSurfaceVariant,
-              rotulo: 'Todas as contas',
-            ),
-            if (quantidade.isNotEmpty) const PopupMenuDivider(),
-            for (final id in ids)
-              _itemFiltro<int?>(
-                valor: id,
-                icone: Icons.account_balance,
-                corIcone: cores.info,
-                rotulo: _contas[id]?.descricao ?? 'Conta $id',
-                quantidade: quantidade[id],
-              ),
-            // "Sem conta" é um filtro de verdade, não ausência de filtro: é o
-            // estado de todo lançamento que nunca escolheu conta e de tudo que
-            // vem do PDV.
-            if (quantidade.containsKey(0))
-              _itemFiltro<int?>(
-                valor: 0,
-                icone: Icons.block,
-                corIcone: theme.colorScheme.onSurfaceVariant,
-                rotulo: 'Sem conta',
-                quantidade: quantidade[0],
-              ),
-          ],
+      itemBuilder: (context) => [
+        _itemFiltro<int?>(
+          valor: null,
+          icone: Icons.clear_all,
+          corIcone: theme.colorScheme.onSurfaceVariant,
+          rotulo: 'Todas as contas',
+        ),
+        if (quantidade.isNotEmpty) const PopupMenuDivider(),
+        for (final id in ids)
+          _itemFiltro<int?>(
+            valor: id,
+            icone: Icons.account_balance,
+            corIcone: cores.info,
+            rotulo: _contas[id]?.descricao ?? 'Conta $id',
+            quantidade: quantidade[id],
+          ),
+        // "Sem conta" é um filtro de verdade, não ausência de filtro: é o
+        // estado de todo lançamento que nunca escolheu conta e de tudo que
+        // vem do PDV.
+        if (quantidade.containsKey(0))
+          _itemFiltro<int?>(
+            valor: 0,
+            icone: Icons.block,
+            corIcone: theme.colorScheme.onSurfaceVariant,
+            rotulo: 'Sem conta',
+            quantidade: quantidade[0],
+          ),
+      ],
       child: _molduraFiltro(
         icone: Icons.account_balance_outlined,
         ativo: ativa != null,
@@ -1191,24 +1186,23 @@ class _FluxosPageState extends State<FluxosPage> {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       onSelected: (s) => setState(() => _situacaoFiltro = s),
-      itemBuilder:
-          (context) => [
-            _itemFiltro<SituacaoFluxo?>(
-              valor: null,
-              icone: Icons.clear_all,
-              corIcone: theme.colorScheme.onSurfaceVariant,
-              rotulo: 'Todas as situações',
-            ),
-            if (quantidade.isNotEmpty) const PopupMenuDivider(),
-            for (final entrada in quantidade.entries)
-              _itemFiltro<SituacaoFluxo?>(
-                valor: entrada.key,
-                icone: entrada.key.icone,
-                corIcone: entrada.key.cor(cores),
-                rotulo: entrada.key.rotulo,
-                quantidade: entrada.value,
-              ),
-          ],
+      itemBuilder: (context) => [
+        _itemFiltro<SituacaoFluxo?>(
+          valor: null,
+          icone: Icons.clear_all,
+          corIcone: theme.colorScheme.onSurfaceVariant,
+          rotulo: 'Todas as situações',
+        ),
+        if (quantidade.isNotEmpty) const PopupMenuDivider(),
+        for (final entrada in quantidade.entries)
+          _itemFiltro<SituacaoFluxo?>(
+            valor: entrada.key,
+            icone: entrada.key.icone,
+            corIcone: entrada.key.cor(cores),
+            rotulo: entrada.key.rotulo,
+            quantidade: entrada.value,
+          ),
+      ],
       // Com situação escolhida o quadrado veste a cor dela — o mesmo verde,
       // vermelho ou âmbar que o selo do card usa.
       child: _molduraFiltro(
@@ -1281,135 +1275,134 @@ class _FluxosPageState extends State<FluxosPage> {
     await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder:
-          (contextoFolha) => StatefulBuilder(
-            // Dois `setState`: o da página, que refaz a lista atrás, e o da
-            // folha, que redesenha os próprios seletores.
-            builder: (contextoFolha, refazerFolha) {
-              void aplicar(void Function() mudanca) {
-                setState(mudanca);
-                refazerFolha(() {});
-              }
+      builder: (contextoFolha) => StatefulBuilder(
+        // Dois `setState`: o da página, que refaz a lista atrás, e o da
+        // folha, que redesenha os próprios seletores.
+        builder: (contextoFolha, refazerFolha) {
+          void aplicar(void Function() mudanca) {
+            setState(mudanca);
+            refazerFolha(() {});
+          }
 
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    0,
-                    AppSpacing.lg,
-                    AppSpacing.lg,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Text('Filtros', style: theme.textTheme.titleMedium),
-                          const Spacer(),
-                          if (_filtrosAtivos > 0)
-                            TextButton(
-                              onPressed: () {
-                                _limparFiltros();
-                                refazerFolha(() {});
-                              },
-                              child: const Text('Limpar'),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      DropdownButtonFormField<int>(
-                        value: _categoriaFiltro,
-                        isDense: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: 'Categoria',
+                      Text('Filtros', style: theme.textTheme.titleMedium),
+                      const Spacer(),
+                      if (_filtrosAtivos > 0)
+                        TextButton(
+                          onPressed: () {
+                            _limparFiltros();
+                            refazerFolha(() {});
+                          },
+                          child: const Text('Limpar'),
                         ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: 0,
-                            child: Text('Todas as categorias'),
-                          ),
-                          for (final c in _categoriasDoTipo)
-                            DropdownMenuItem(
-                              value: c.id!,
-                              child: Text(
-                                c.descricao,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged:
-                            (v) => aplicar(() => _categoriaFiltro = v ?? 0),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      DropdownButtonFormField<int?>(
-                        value: _contaFiltro,
-                        isDense: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: 'Conta',
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: null,
-                            child: Text('Todas as contas'),
-                          ),
-                          for (final entrada in _quantidadePorConta.entries
-                              .where((e) => e.key != 0))
-                            DropdownMenuItem(
-                              value: entrada.key,
-                              child: Text(
-                                _contas[entrada.key]?.descricao ??
-                                    'Conta ${entrada.key}',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          if (_quantidadePorConta.containsKey(0))
-                            const DropdownMenuItem(
-                              value: 0,
-                              child: Text('Sem conta'),
-                            ),
-                        ],
-                        onChanged: (v) => aplicar(() => _contaFiltro = v),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      DropdownButtonFormField<SituacaoFluxo?>(
-                        value: _situacaoFiltro,
-                        isDense: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          labelText: 'Situação',
-                        ),
-                        items: [
-                          const DropdownMenuItem(
-                            value: null,
-                            child: Text('Todas as situações'),
-                          ),
-                          for (final entrada in _quantidadePorSituacao.entries)
-                            DropdownMenuItem(
-                              value: entrada.key,
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    entrada.key.icone,
-                                    size: 16,
-                                    color: entrada.key.cor(cores),
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
-                                  Text(entrada.key.rotulo),
-                                ],
-                              ),
-                            ),
-                        ],
-                        onChanged: (v) => aplicar(() => _situacaoFiltro = v),
-                      ),
                     ],
                   ),
-                ),
-              );
-            },
-          ),
+                  const SizedBox(height: AppSpacing.sm),
+                  DropdownButtonFormField<int>(
+                    value: _categoriaFiltro,
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Categoria',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: 0,
+                        child: Text('Todas as categorias'),
+                      ),
+                      for (final c in _categoriasDoTipo)
+                        DropdownMenuItem(
+                          value: c.id!,
+                          child: Text(
+                            c.descricao,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => aplicar(() => _categoriaFiltro = v ?? 0),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<int?>(
+                    value: _contaFiltro,
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Conta',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Todas as contas'),
+                      ),
+                      for (final entrada in _quantidadePorConta.entries.where(
+                        (e) => e.key != 0,
+                      ))
+                        DropdownMenuItem(
+                          value: entrada.key,
+                          child: Text(
+                            _contas[entrada.key]?.descricao ??
+                                'Conta ${entrada.key}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      if (_quantidadePorConta.containsKey(0))
+                        const DropdownMenuItem(
+                          value: 0,
+                          child: Text('Sem conta'),
+                        ),
+                    ],
+                    onChanged: (v) => aplicar(() => _contaFiltro = v),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  DropdownButtonFormField<SituacaoFluxo?>(
+                    value: _situacaoFiltro,
+                    isDense: true,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      labelText: 'Situação',
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Todas as situações'),
+                      ),
+                      for (final entrada in _quantidadePorSituacao.entries)
+                        DropdownMenuItem(
+                          value: entrada.key,
+                          child: Row(
+                            children: [
+                              Icon(
+                                entrada.key.icone,
+                                size: 16,
+                                color: entrada.key.cor(cores),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(entrada.key.rotulo),
+                            ],
+                          ),
+                        ),
+                    ],
+                    onChanged: (v) => aplicar(() => _situacaoFiltro = v),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -1625,10 +1618,11 @@ class _FluxosPageState extends State<FluxosPage> {
             fit: BoxFit.scaleDown,
             child: Text(
               CurrencyFormatter.format(valor),
-              style: (destaque
-                      ? theme.textTheme.titleSmall
-                      : theme.textTheme.bodyMedium)
-                  ?.copyWith(color: cor, fontWeight: FontWeight.w600),
+              style:
+                  (destaque
+                          ? theme.textTheme.titleSmall
+                          : theme.textTheme.bodyMedium)
+                      ?.copyWith(color: cor, fontWeight: FontWeight.w600),
             ),
           ),
         ],

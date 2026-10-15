@@ -12,6 +12,7 @@ import '../utils/currency_formatter.dart';
 import '../utils/meses.dart';
 import '../utils/responsive_utils.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/moldura_menu.dart';
 import '../widgets/conta_form_dialog.dart';
 import '../widgets/logo_banco.dart';
 import '../widgets/shimmer_widgets.dart';
@@ -125,16 +126,14 @@ class _ContasPageState extends State<ContasPage> {
 
   /// Contas de verdade: fora o balde "Sem conta", que não se edita, não se apaga
   /// e não participa de transferência.
-  List<SaldoConta> get _contas =>
-      _saldos.where((c) => !c.semConta).toList();
+  List<SaldoConta> get _contas => _saldos.where((c) => !c.semConta).toList();
 
   /// As que podem receber ou enviar uma transferência, e as que recebem as
   /// movimentações de uma conta apagada.
   List<SaldoConta> get _contasAtivas =>
       _contas.where((c) => c.ativado).toList();
 
-  double get _totalAtual =>
-      _saldos.fold(0.0, (soma, c) => soma + c.saldoAtual);
+  double get _totalAtual => _saldos.fold(0.0, (soma, c) => soma + c.saldoAtual);
 
   double get _totalPrevisto =>
       _saldos.fold(0.0, (soma, c) => soma + c.saldoPrevisto);
@@ -219,28 +218,27 @@ class _ContasPageState extends State<ContasPage> {
   Future<void> _apagarTransferencia(Transferencia t) async {
     final confirmado = await showDialog<bool>(
       context: context,
-      builder:
-          (_) => AlertDialog(
-            title: const Text('Apagar transferência?'),
-            content: Text(
-              'As duas movimentações serão apagadas: a saída de '
-              '${_nomeConta(t.idContaOrigem)} e a entrada em '
-              '${_nomeConta(t.idContaDestino)}.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: context.appColors.error,
-                ),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Apagar'),
-              ),
-            ],
+      builder: (_) => AlertDialog(
+        title: const Text('Apagar transferência?'),
+        content: Text(
+          'As duas movimentações serão apagadas: a saída de '
+          '${_nomeConta(t.idContaOrigem)} e a entrada em '
+          '${_nomeConta(t.idContaDestino)}.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
           ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appColors.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Apagar'),
+          ),
+        ],
+      ),
     );
 
     if (confirmado != true) return;
@@ -284,6 +282,12 @@ class _ContasPageState extends State<ContasPage> {
 
   @override
   Widget build(BuildContext context) {
+    return MolduraMenu(
+      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, bool menuFixo) {
     // Transferência exige duas contas ativas; com uma só, o botão não teria para
     // onde mandar o dinheiro.
     final podeTransferir = _contasAtivas.length >= 2;
@@ -300,16 +304,13 @@ class _ContasPageState extends State<ContasPage> {
             ),
         ],
       ),
-      drawer: const AppDrawer(),
+      drawer: menuFixo ? null : const AppDrawer(),
       floatingActionButton: FloatingActionButton(
         onPressed: _novaConta,
         tooltip: 'Nova conta',
         child: const Icon(Icons.add),
       ),
-      body: RefreshIndicator(
-        onRefresh: _carregar,
-        child: _corpo(),
-      ),
+      body: RefreshIndicator(onRefresh: _carregar, child: _corpo()),
     );
   }
 
@@ -356,11 +357,10 @@ class _ContasPageState extends State<ContasPage> {
         ),
         // O balde "Sem conta" pode ter saldo mesmo sem conta cadastrada; mostrar
         // o total evita a impressão de que não há movimentação nenhuma.
-        rodape:
-            _saldos.isEmpty
-                ? null
-                : 'Sem conta: ${CurrencyFormatter.format(_totalAtual)} '
-                    'em ${_saldos.first.quantidade} movimentações',
+        rodape: _saldos.isEmpty
+            ? null
+            : 'Sem conta: ${CurrencyFormatter.format(_totalAtual)} '
+                  'em ${_saldos.first.quantidade} movimentações',
       );
     }
 
@@ -551,27 +551,23 @@ class _ContasPageState extends State<ContasPage> {
           children: [
             Opacity(
               opacity: atenuada ? 0.6 : 1,
-              child:
-                  conta.semConta
-                      ? Container(
-                        width: 44,
-                        height: 44,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: theme.colorScheme.onSurfaceVariant.withValues(
-                            alpha: 0.15,
-                          ),
+              child: conta.semConta
+                  ? Container(
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.15,
                         ),
-                        child: Icon(
-                          Icons.help_outline,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      )
-                      : LogoBanco(
-                        chave: conta.imagem,
-                        nomeConta: conta.descricao,
                       ),
+                      child: Icon(
+                        Icons.help_outline,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    )
+                  : LogoBanco(chave: conta.imagem, nomeConta: conta.descricao),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
@@ -599,9 +595,9 @@ class _ContasPageState extends State<ContasPage> {
                     conta.semConta
                         ? 'Lançamentos sem conta atribuída'
                         : [
-                          if (nomeBanco.isNotEmpty) nomeBanco,
-                          '${conta.quantidade} ${conta.quantidade == 1 ? 'movimentação' : 'movimentações'}',
-                        ].join(' · '),
+                            if (nomeBanco.isNotEmpty) nomeBanco,
+                            '${conta.quantidade} ${conta.quantidade == 1 ? 'movimentação' : 'movimentações'}',
+                          ].join(' · '),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -643,29 +639,28 @@ class _ContasPageState extends State<ContasPage> {
                   if (opcao == 'editar') _editar(conta);
                   if (opcao == 'apagar') _apagar(conta);
                 },
-                itemBuilder:
-                    (context) => const [
-                      PopupMenuItem(
-                        value: 'editar',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 18),
-                            SizedBox(width: AppSpacing.sm),
-                            Text('Editar'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'apagar',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline, size: 18),
-                            SizedBox(width: AppSpacing.sm),
-                            Text('Apagar'),
-                          ],
-                        ),
-                      ),
-                    ],
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'editar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit, size: 18),
+                        SizedBox(width: AppSpacing.sm),
+                        Text('Editar'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'apagar',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 18),
+                        SizedBox(width: AppSpacing.sm),
+                        Text('Apagar'),
+                      ],
+                    ),
+                  ),
+                ],
               )
             else
               const SizedBox(width: AppSpacing.xl),
@@ -724,8 +719,8 @@ class _ContasPageState extends State<ContasPage> {
         data == null
             ? CurrencyFormatter.format(t.valor)
             : '${data.day.toString().padLeft(2, '0')}/'
-                '${data.month.toString().padLeft(2, '0')} · '
-                '${CurrencyFormatter.format(t.valor)}',
+                  '${data.month.toString().padLeft(2, '0')} · '
+                  '${CurrencyFormatter.format(t.valor)}',
         style: theme.textTheme.bodySmall,
       ),
       trailing: IconButton(

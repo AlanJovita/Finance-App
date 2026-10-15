@@ -5,6 +5,7 @@ import '../models/caixa.dart';
 import '../services/api_service.dart';
 import '../widgets/charts/caixas_chart_widget.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/moldura_menu.dart';
 import '../widgets/shimmer_widgets.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
@@ -48,9 +49,15 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
 
   @override
   Widget build(BuildContext context) {
+    return MolduraMenu(
+      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, bool menuFixo) {
     return Scaffold(
       appBar: AppBar(title: const Text('Lista de Caixas')),
-      drawer: const AppDrawer(),
+      drawer: menuFixo ? null : const AppDrawer(),
       body: FutureBuilder<List<Caixa>>(
         future: _caixasFuture,
         builder: (context, snapshot) {
@@ -85,9 +92,8 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: caixas.length,
-                  itemBuilder:
-                      (context, index) =>
-                          _buildCaixaAnimado(caixas[index], index, caixas.length),
+                  itemBuilder: (context, index) =>
+                      _buildCaixaAnimado(caixas[index], index, caixas.length),
                 ),
               ],
             ),
@@ -101,15 +107,13 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
     final inicio = (index / total) * 0.5;
     final fim = ((index + 1) / total) * 0.5 + 0.5;
 
-    final slide = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Interval(inicio, fim, curve: Curves.easeOutCubic),
-      ),
-    );
+    final slide = Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Interval(inicio, fim, curve: Curves.easeOutCubic),
+          ),
+        );
 
     final fade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
@@ -159,10 +163,9 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
             const SizedBox(width: AppSpacing.md),
             _buildDado(
               icone: Icons.calendar_today,
-              texto:
-                  caixa.dataAbertura != null
-                      ? '${caixa.dataAbertura!.day.toString().padLeft(2, '0')}/${caixa.dataAbertura!.month.toString().padLeft(2, '0')}'
-                      : 'N/A',
+              texto: caixa.dataAbertura != null
+                  ? '${caixa.dataAbertura!.day.toString().padLeft(2, '0')}/${caixa.dataAbertura!.month.toString().padLeft(2, '0')}'
+                  : 'N/A',
               cor: theme.colorScheme.onSurfaceVariant,
             ),
             const Spacer(),
@@ -227,10 +230,11 @@ class _ListaCaixasPageState extends State<ListaCaixasPage>
         const SizedBox(width: AppSpacing.xs),
         Text(
           texto,
-          style: (destaque
-                  ? theme.textTheme.titleSmall
-                  : theme.textTheme.bodySmall)
-              ?.copyWith(color: cor),
+          style:
+              (destaque
+                      ? theme.textTheme.titleSmall
+                      : theme.textTheme.bodySmall)
+                  ?.copyWith(color: cor),
         ),
       ],
     );

@@ -15,6 +15,7 @@ import 'package:finance_app/widgets/boletos_widget.dart';
 import 'package:finance_app/widgets/cartoes_movimentacoes.dart';
 import 'package:finance_app/widgets/charts/cartao_grafico_mensal.dart';
 import 'package:finance_app/widgets/grade_cartoes.dart';
+import 'package:finance_app/widgets/moldura_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
@@ -65,10 +66,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Object? _erroMovimentacoes;
 
   /// Nada carregou. É o único caso que troca o painel pela tela de erro.
-  String? get _error =>
-      (_erroCaixa != null && _erroMovimentacoes != null)
-          ? _erroCaixa.toString()
-          : null;
+  String? get _error => (_erroCaixa != null && _erroMovimentacoes != null)
+      ? _erroCaixa.toString()
+      : null;
 
   /// A loja tem caixa — e, com ele, faturamento e pedidos para comparar.
   bool get _temCaixa => _caixa != null;
@@ -205,6 +205,17 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
+    return MolduraMenu(
+      builder: (context, menuFixo) =>
+          _buildScaffold(context, themeProvider, menuFixo),
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    ThemeProvider themeProvider,
+    bool menuFixo,
+  ) {
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -232,20 +243,19 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-      drawer: const AppDrawer(),
-      body:
-          _isLoading
-              ? ShimmerWidgets.dashboardFullShimmer(context)
-              : _error != null
-              ? _buildErro()
-              : RefreshIndicator(
-                onRefresh: _loadData,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: context.responsivePadding(),
-                  child: _buildConteudo(context),
-                ),
+      drawer: menuFixo ? null : const AppDrawer(),
+      body: _isLoading
+          ? ShimmerWidgets.dashboardFullShimmer(context)
+          : _error != null
+          ? _buildErro()
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: context.responsivePadding(),
+                child: _buildConteudo(context),
               ),
+            ),
     );
   }
 
@@ -268,7 +278,13 @@ class _DashboardPageState extends State<DashboardPage> {
   /// de dois gráficos.
   Widget _buildConteudo(BuildContext context) {
     final espaco = context.responsiveSpacing();
-    final colunas = AppLayout.colunasResumo(MediaQuery.sizeOf(context).width);
+
+    // O menu fixo come 304px, e nasce exatamente na largura que seria o piso de
+    // três colunas: sem descontá-lo, uma tela de 1500px montaria três colunas
+    // mais estreitas que as duas de um celular deitado.
+    final colunas = AppLayout.colunasResumo(
+      AppLayout.larguraUtil(MediaQuery.sizeOf(context).width),
+    );
     final painel = _painel;
 
     final cartoes = <Widget>[
@@ -330,11 +346,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: AppLayout.conteudoMaximo),
-        child: GradeCartoes(
-          colunas: colunas,
-          espaco: espaco,
-          cartoes: cartoes,
-        ),
+        child: GradeCartoes(colunas: colunas, espaco: espaco, cartoes: cartoes),
       ),
     );
   }
@@ -616,10 +628,12 @@ class _DashboardPageState extends State<DashboardPage> {
     final cores = context.appColors;
 
     // Calcula percentuais
-    final percentMedia =
-        media > 0 ? ((currentValue - media) / media * 100) : 0.0;
-    final percentRecord =
-        record > 0 ? ((currentValue - record) / record * 100) : 0.0;
+    final percentMedia = media > 0
+        ? ((currentValue - media) / media * 100)
+        : 0.0;
+    final percentRecord = record > 0
+        ? ((currentValue - record) / record * 100)
+        : 0.0;
 
     final isBeatRecord = currentValue >= record && record > 0;
 
@@ -628,13 +642,9 @@ class _DashboardPageState extends State<DashboardPage> {
       decoration: BoxDecoration(
         color: theme.cardColor,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border:
-            isBeatRecord
-                ? Border.all(
-                  color: cores.warning.withValues(alpha: 0.5),
-                  width: 2,
-                )
-                : null,
+        border: isBeatRecord
+            ? Border.all(color: cores.warning.withValues(alpha: 0.5), width: 2)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -691,10 +701,9 @@ class _DashboardPageState extends State<DashboardPage> {
     final positivo = percent >= 0;
     final cor = positivo ? cores.success : cores.error;
     final referencia = isMedia ? 'média' : 'record';
-    final preposicao =
-        isMedia
-            ? (positivo ? 'acima da' : 'abaixo da')
-            : (positivo ? 'acima do' : 'abaixo do');
+    final preposicao = isMedia
+        ? (positivo ? 'acima da' : 'abaixo da')
+        : (positivo ? 'acima do' : 'abaixo do');
 
     return Row(
       children: [

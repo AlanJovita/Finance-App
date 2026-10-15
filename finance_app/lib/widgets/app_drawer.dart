@@ -13,12 +13,27 @@ import '../utils/auth_actions.dart';
 /// vazia — o mesmo motivo que esconde o bloco do caixa no painel. Quem responde
 /// é o [CaixaCache], que o painel já semeou: o menu não dispara requisição a
 /// cada abertura.
+///
+/// **Ele vive em dois lugares, e o [fixo] é quem diz qual.** Como gaveta do
+/// `Scaffold` (o padrão) e, acima de [AppLayout.menuFixo], encostado na lateral
+/// pela [MolduraMenu]. A diferença que importa não é visual: na gaveta, tocar um
+/// item precisa **fechá-la** com um `Navigator.pop`, e fixo esse mesmo `pop`
+/// derrubaria a rota em foco — o menu não está sobre nada que se possa fechar.
 class AppDrawer extends StatelessWidget {
   /// Injetável para o teste não depender de rede. Nulo — o normal — faz o menu
   /// perguntar ao [CaixaCache].
   final bool? temCaixa;
 
-  const AppDrawer({super.key, this.temCaixa});
+  /// Encostado na lateral em vez de aberto como gaveta.
+  final bool fixo;
+
+  const AppDrawer({super.key, this.temCaixa, this.fixo = false});
+
+  /// Fecha a gaveta. Fixo, não há gaveta — e o `pop` acertaria a rota.
+  void _fecharGaveta(BuildContext context) {
+    if (fixo) return;
+    Navigator.pop(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +42,10 @@ class AppDrawer extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return Drawer(
+      // Fixo ele é parte da tela, não está sobre ela: sem sombra, e com o canto
+      // direito reto para encostar no divisor em vez de descolar dele.
+      elevation: fixo ? AppElevation.none : null,
+      shape: fixo ? const RoundedRectangleBorder() : null,
       child: Column(
         children: [
           // Header do Drawer com logo e gradiente
@@ -172,7 +191,7 @@ class AppDrawer extends StatelessWidget {
                 onPressed: () {
                   // Fecha o drawer antes de sair; o popUntil do sairDoApp é
                   // sobre a pilha de rotas, não sobre o drawer aberto.
-                  Navigator.pop(context);
+                  _fecharGaveta(context);
                   sairDoApp(context);
                 },
                 icon: const Icon(Icons.logout, color: Colors.white),
@@ -221,9 +240,8 @@ class AppDrawer extends StatelessWidget {
 
     return FutureBuilder<bool>(
       future: cache.obter(),
-      builder:
-          (context, snapshot) =>
-              snapshot.data == true ? item : const SizedBox.shrink(),
+      builder: (context, snapshot) =>
+          snapshot.data == true ? item : const SizedBox.shrink(),
     );
   }
 
@@ -244,10 +262,9 @@ class AppDrawer extends StatelessWidget {
         vertical: 2,
       ),
       decoration: BoxDecoration(
-        color:
-            isSelected
-                ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                : Colors.transparent,
+        color: isSelected
+            ? theme.colorScheme.primary.withValues(alpha: 0.1)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: ListTile(
@@ -258,20 +275,19 @@ class AppDrawer extends StatelessWidget {
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
-        trailing:
-            isSelected
-                ? Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                )
-                : null,
+        trailing: isSelected
+            ? Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: theme.colorScheme.primary,
+              )
+            : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         onTap: () {
           if (currentRoute != route) {
-            Navigator.pop(context);
+            _fecharGaveta(context);
             // Troca a tela em foco **preservando a raiz**, que é o
             // `AuthWrapper`. Com `pushReplacementNamed` a primeira navegação
             // pelo menu substituía a própria raiz: a pilha ficava com a tela
@@ -284,7 +300,9 @@ class AppDrawer extends StatelessWidget {
               (rota) => rota.isFirst,
             );
           } else {
-            Navigator.pop(context);
+            // Tocar o item da tela em foco só fecha a gaveta. Fixo, não há o
+            // que fechar nem para onde ir — o toque não faz nada.
+            _fecharGaveta(context);
           }
         },
       ),

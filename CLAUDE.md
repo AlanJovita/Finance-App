@@ -97,6 +97,35 @@ que havia ali, a primeira navegação pelo menu substituía o próprio
 (`utils/auth_actions.dart` e a própria `GuardaSessao`) caía na tela interna em
 vez da tela de login.
 
+**O menu tem duas formas, e `AppLayout.menuFixo` (1500px) decide qual**
+(`widgets/moldura_menu.dart`): gaveta abaixo disso, encostado na lateral acima.
+Quatro coisas aí não se leem no código.
+
+**Fixo, o `Navigator.pop` que fechava a gaveta acerta a rota.** É a armadilha da
+feature: `AppDrawer` dá um `pop` antes de navegar — para fechar a gaveta — e sem
+gaveta esse `pop` derruba a tela em foco. Daí o `AppDrawer.fixo`, que é o que o
+`_fecharGaveta` consulta; vale para o item do menu **e** para o botão "Sair".
+`test/menu_fixo_test.dart` trava os dois caminhos.
+
+**A moldura embrulha a tela inteira, `AppBar` incluída.** Posta dentro do
+`body`, ela deixaria o menu abaixo da barra de título e, nas Receitas/Despesas,
+a barra de totais do rodapé (`bottomNavigationBar`) correria por baixo dele —
+somando a lista debaixo do menu.
+
+**Fixo, a tela não declara `drawer:`.** Por isso o `builder` devolve `menuFixo`:
+declarar os dois deixaria o botão de hambúrguer na barra, abrindo uma segunda
+cópia do menu por cima da primeira.
+
+**O menu fixo desconta da conta de colunas do Resumo** (`AppLayout.larguraUtil`).
+Ele nasce em 1500px, exatamente o número que é o piso de três colunas: sem
+descontar os 304px dele, uma tela de 1500 montaria três colunas de ~367px — mais
+estreitas que as **duas** de um celular deitado, que é o cenário mais apertado
+que existe. Com o desconto, as três colunas voltam a partir de 1805px de tela.
+
+Só as cinco telas de menu usam a moldura. As de detalhe empilhadas por cima
+(`CaixaPage`, `CartaoMovimentosPage`) continuam sem menu: elas já não tinham
+gaveta, e se sai delas pelo botão de voltar.
+
 `test/sessao_test.dart` trava o conjunto: a rota interna aberta por
 recarregamento não monta nem por um frame, a sessão lembrada monta a tela com a
 loja (e nunca com 0), a sessão da aba sobrevive a um `AuthProvider` novo, o
@@ -355,6 +384,9 @@ em 720 e 1500px sobre a largura **da tela**). Três decisões moram aí:
   estreitada continua paisagem. Os limiares foram escolhidos para dar o mesmo resultado nos
   aparelhos (celular em pé ≈390 → 1; deitado ≈844 → 2) com a consequência aceita de que
   tablet **em pé** (≈800) também ganha duas.
+- **A largura é a que sobra depois do menu fixo**, não a da tela: ver
+  `AppLayout.larguraUtil` e a seção do menu lateral. Na prática as três colunas começam em
+  1805px de tela, e não em 1500.
 - **Todo card é peça solta.** Não existem mais "bloco do caixa" e "bloco de movimentações"
   como unidades de layout: os dois gráficos mensais (`CartaoGraficoMensal`, um por
   `GraficoMensal`) e os cinco cards de movimentações (`CartaoSaldos`, `CartaoNatureza` ×2,

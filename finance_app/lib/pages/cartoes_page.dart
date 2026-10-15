@@ -13,6 +13,7 @@ import '../utils/currency_formatter.dart';
 import '../utils/meses.dart';
 import '../utils/responsive_utils.dart';
 import '../widgets/app_drawer.dart';
+import '../widgets/moldura_menu.dart';
 import '../widgets/cartao_form_dialog.dart';
 import '../widgets/logo_bandeira.dart';
 import '../widgets/shimmer_widgets.dart';
@@ -117,10 +118,9 @@ class _CartoesPageState extends State<CartoesPage> {
     // aqui evita uma consulta só para reabrir o que já está na tela.
     final gravou = await showDialog<bool>(
       context: context,
-      builder:
-          (_) => CartaoFormDialog(
-            cartao: resumo.paraCartao(GlobalState().firstIdLoja),
-          ),
+      builder: (_) => CartaoFormDialog(
+        cartao: resumo.paraCartao(GlobalState().firstIdLoja),
+      ),
     );
     if (gravou == true) _carregar();
   }
@@ -128,10 +128,9 @@ class _CartoesPageState extends State<CartoesPage> {
   Future<void> _abrirMovimentos(ResumoCartao resumo) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder:
-            (_) => CartaoMovimentosPage(
-              cartao: resumo.paraCartao(GlobalState().firstIdLoja),
-            ),
+        builder: (_) => CartaoMovimentosPage(
+          cartao: resumo.paraCartao(GlobalState().firstIdLoja),
+        ),
       ),
     );
 
@@ -150,28 +149,27 @@ class _CartoesPageState extends State<CartoesPage> {
   Future<void> _apagar(ResumoCartao resumo) async {
     final confirmado = await showDialog<bool>(
       context: context,
-      builder:
-          (_) => AlertDialog(
-            title: Text('Apagar "${resumo.descricao}"?'),
-            content: const Text(
-              'O cadastro do cartão é removido. As despesas de fatura já '
-              'lançadas no caixa continuam existindo — elas são dinheiro que '
-              'saiu da conta.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: context.appColors.error,
-                ),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Apagar'),
-              ),
-            ],
+      builder: (_) => AlertDialog(
+        title: Text('Apagar "${resumo.descricao}"?'),
+        content: const Text(
+          'O cadastro do cartão é removido. As despesas de fatura já '
+          'lançadas no caixa continuam existindo — elas são dinheiro que '
+          'saiu da conta.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
           ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appColors.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Apagar'),
+          ),
+        ],
+      ),
     );
 
     if (confirmado != true) return;
@@ -205,39 +203,41 @@ class _CartoesPageState extends State<CartoesPage> {
   /// "Arquivar" vem primeiro e é a ação destacada: é o caminho certo para parar
   /// de usar um cartão, e preserva o histórico. Apagar os lançamentos é a saída
   /// para o cartão criado por engano.
-  Future<void> _apagarComLancamentos(ResumoCartao resumo, int quantidade) async {
+  Future<void> _apagarComLancamentos(
+    ResumoCartao resumo,
+    int quantidade,
+  ) async {
     final quantos =
         '$quantidade ${quantidade == 1 ? 'lançamento' : 'lançamentos'}';
 
     final escolha = await showDialog<String>(
       context: context,
-      builder:
-          (_) => AlertDialog(
-            title: Text('"${resumo.descricao}" tem $quantos'),
-            content: const Text(
-              'Arquivar tira o cartão do lançamento e mantém o saldo devedor e '
-              'o histórico aqui.\n\n'
-              'Apagar remove o cartão, os lançamentos e as faturas dele. As '
-              'despesas de fatura já lançadas no caixa continuam existindo.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancelar'),
-              ),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: context.appColors.error,
-                ),
-                onPressed: () => Navigator.of(context).pop('apagar'),
-                child: const Text('Apagar tudo'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop('arquivar'),
-                child: const Text('Arquivar'),
-              ),
-            ],
+      builder: (_) => AlertDialog(
+        title: Text('"${resumo.descricao}" tem $quantos'),
+        content: const Text(
+          'Arquivar tira o cartão do lançamento e mantém o saldo devedor e '
+          'o histórico aqui.\n\n'
+          'Apagar remove o cartão, os lançamentos e as faturas dele. As '
+          'despesas de fatura já lançadas no caixa continuam existindo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
           ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: context.appColors.error,
+            ),
+            onPressed: () => Navigator.of(context).pop('apagar'),
+            child: const Text('Apagar tudo'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop('arquivar'),
+            child: const Text('Arquivar'),
+          ),
+        ],
+      ),
     );
 
     if (escolha == null) return;
@@ -274,10 +274,7 @@ class _CartoesPageState extends State<CartoesPage> {
 
   void _avisar(String mensagem) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensagem),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(mensagem), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -295,9 +292,15 @@ class _CartoesPageState extends State<CartoesPage> {
 
   @override
   Widget build(BuildContext context) {
+    return MolduraMenu(
+      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, bool menuFixo) {
     return Scaffold(
       appBar: AppBar(title: const Text('Cartões de Crédito')),
-      drawer: const AppDrawer(),
+      drawer: menuFixo ? null : const AppDrawer(),
       floatingActionButton: FloatingActionButton(
         onPressed: _novoCartao,
         tooltip: 'Novo cartão',
@@ -590,10 +593,9 @@ class _CartoesPageState extends State<CartoesPage> {
                         Text(
                           '${CurrencyFormatter.format(cartao.limiteDisponivel)} livre',
                           style: theme.textTheme.labelSmall?.copyWith(
-                            color:
-                                cartao.limiteDisponivel! < 0
-                                    ? cores.error
-                                    : theme.colorScheme.onSurfaceVariant,
+                            color: cartao.limiteDisponivel! < 0
+                                ? cores.error
+                                : theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                     ],
@@ -607,39 +609,38 @@ class _CartoesPageState extends State<CartoesPage> {
                       if (opcao == 'editar') _editar(cartao);
                       if (opcao == 'apagar') _apagar(cartao);
                     },
-                    itemBuilder:
-                        (context) => const [
-                          PopupMenuItem(
-                            value: 'lancamentos',
-                            child: Row(
-                              children: [
-                                Icon(Icons.receipt_long, size: 18),
-                                SizedBox(width: AppSpacing.sm),
-                                Text('Lançamentos'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'editar',
-                            child: Row(
-                              children: [
-                                Icon(Icons.edit, size: 18),
-                                SizedBox(width: AppSpacing.sm),
-                                Text('Editar'),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'apagar',
-                            child: Row(
-                              children: [
-                                Icon(Icons.delete_outline, size: 18),
-                                SizedBox(width: AppSpacing.sm),
-                                Text('Apagar'),
-                              ],
-                            ),
-                          ),
-                        ],
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'lancamentos',
+                        child: Row(
+                          children: [
+                            Icon(Icons.receipt_long, size: 18),
+                            SizedBox(width: AppSpacing.sm),
+                            Text('Lançamentos'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'editar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 18),
+                            SizedBox(width: AppSpacing.sm),
+                            Text('Editar'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'apagar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, size: 18),
+                            SizedBox(width: AppSpacing.sm),
+                            Text('Apagar'),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

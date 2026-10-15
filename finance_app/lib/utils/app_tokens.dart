@@ -70,14 +70,40 @@ abstract final class AppLayout {
 
   /// Quantas colunas o Resumo monta em [largura].
   ///
-  /// A conta é sobre a largura **da tela**, não a que sobra depois do padding:
-  /// é o número que descreve o aparelho, e é por ele que os dois limiares acima
-  /// foram escolhidos. A grade depois se acomoda no espaço que de fato tem.
+  /// [largura] é a que sobra para o conteúdo depois do menu lateral fixo — use
+  /// [larguraUtil] para obtê-la a partir da largura da tela. **Não** é a largura
+  /// descontado o padding da página: os limiares acima descrevem o espaço de
+  /// layout, e a grade depois se acomoda no respiro que a página dá.
   static int colunasResumo(double largura) {
     if (largura >= tresColunas) return 3;
     if (largura >= duasColunas) return 2;
     return 1;
   }
+
+  /// A partir daqui o menu lateral deixa de ser gaveta e fica **fixo** na tela.
+  ///
+  /// É sobre a largura da tela, e não sobre a que sobra: quem decide se cabe um
+  /// menu permanente é o aparelho. Abaixo disso ele volta a ser a gaveta do
+  /// botão de hambúrguer.
+  static const double menuFixo = 1500;
+
+  /// Largura do menu quando fixo — o padrão do `Drawer` do Material.
+  static const double larguraMenu = 304;
+
+  /// O divisor entre o menu e o conteúdo.
+  static const double _divisorMenu = 1;
+
+  static bool menuLateralFixo(double larguraTela) => larguraTela >= menuFixo;
+
+  /// O que sobra da tela para o conteúdo, já descontado o menu fixo.
+  ///
+  /// Existe porque o menu fixo nasce exatamente em [menuFixo] = 1500, o mesmo
+  /// número que seria o piso de três colunas: sem descontá-lo, uma tela de
+  /// 1500px montaria três colunas de ~367px — mais estreitas que as duas
+  /// colunas de um celular deitado, que é o cenário mais apertado que existe.
+  static double larguraUtil(double larguraTela) => menuLateralFixo(larguraTela)
+      ? larguraTela - larguraMenu - _divisorMenu
+      : larguraTela;
 }
 
 /// Superfícies escuras precisam de mais elevação que as claras para se separarem
