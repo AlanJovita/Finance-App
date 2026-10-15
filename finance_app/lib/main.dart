@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:responsive_framework/responsive_framework.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/menu_provider.dart';
@@ -14,7 +15,22 @@ import 'pages/fluxos_page.dart';
 import 'utils/app_theme.dart';
 import 'widgets/guarda_sessao.dart';
 
+/// A rota vem do **caminho** da URL, não do fragmento.
+///
+/// O padrão do Flutter Web é `HashUrlStrategy`, e com ele o navegador lê a rota
+/// de depois do `#`. O link de acesso direto que o app-suporte gera é
+/// `finance.premiosistemas.com.br/<token>` — caminho, sem `#`: o Flutter subia,
+/// olhava um fragmento vazio, resolvia a rota inicial como `/` e caía na tela de
+/// login. O `onGenerateRoute` abaixo, que trata o token, nunca era chamado.
+///
+/// Chamar isto antes do `runApp` é o que faz o caminho virar a rota. O nginx já
+/// manda todo caminho desconhecido para o `index.html` (ver `nginx.conf`), que é
+/// a outra metade necessária — sem ela, recarregar em `/receitas` daria 404.
+///
+/// Fora da web é no-op: o `url_strategy.dart` do `flutter_web_plugins` exporta
+/// um stub condicional para as outras plataformas.
 void main() {
+  usePathUrlStrategy();
   runApp(const MyApp());
 }
 

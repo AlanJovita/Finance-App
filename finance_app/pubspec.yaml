@@ -35,6 +35,12 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
+  # Só pelo `usePathUrlStrategy()` do `main.dart`: sem ele o Flutter Web lê a
+  # rota do fragmento e o link de acesso direto (`/<token>`) nunca chega ao
+  # `onGenerateRoute`. Fora da web o pacote exporta um stub e não custa nada.
+  flutter_web_plugins:
+    sdk: flutter
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8

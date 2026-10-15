@@ -40,7 +40,21 @@ Every log line carries `id_software = 10` (`idSoftwareFinance`) and `versao = ve
 
 The finance-api sends to the same place, via `Util/log_api.py` there. Deserialization (`fromJson`) deliberately does **not** log remotely: it runs once per item, so a malformed list would emit one line per record — `ApiService` already logs the whole request once, with endpoint and body.
 
-**Routing and token login** (`lib/main.dart`): named routes exist for `/login`, `/dashboard`, `/caixas`, `/contas`, `/cartoes`, `/receitas`, `/despesas`. Any *other* non-root path is treated as a login token: `onGenerateRoute` hands it to `TokenLoginWrapper`, which decodes it via `TokenService` (URL-safe Base64 of a CNPJ, padding stripped) and calls `AuthProvider.loginByToken`. Keep this in mind when adding routes — a new named route must be added to the known-routes check in `onGenerateRoute`, to the `routes` map, **and embrulhada na `GuardaSessao`** (seção seguinte), ou ela será interpretada como token — ou, pior, abrirá sem sessão.
+**Routing and token login** (`lib/main.dart`): named routes exist for `/login`, `/dashboard`, `/caixas`, `/contas`, `/cartoes`, `/receitas`, `/despesas`. Any *other* non-root path is treated as a login token: `onGenerateRoute` hands it to `TokenLoginWrapper`, which repassa o token a `AuthProvider.loginByToken` → `POST /finance/login/token`. O token é **opaco** (`secrets.token_urlsafe(32)`, ~43 chars): quem valida é a API, e o app não decodifica nada dele — ver `TokenService`, que só confere o formato para não gastar requisição com caminho que claramente não é token. Keep this in mind when adding routes — a new named route must be added to the known-routes check in `onGenerateRoute`, to the `routes` map, **and embrulhada na `GuardaSessao`** (seção seguinte), ou ela será interpretada como token — ou, pior, abrirá sem sessão.
+
+**A rota vem do caminho da URL, e isso depende de duas peças.** `main()` chama
+`usePathUrlStrategy()`: o padrão do Flutter Web é `HashUrlStrategy`, que lê a
+rota de depois do `#`, e com ele o link de acesso direto do app-suporte
+(`finance.premiosistemas.com.br/<token>`) nunca chegava ao `onGenerateRoute` —
+o Flutter via um fragmento vazio, resolvia a rota inicial como `/` e caía na
+tela de login, que era o sintoma. A outra peça é o `try_files ... /index.html`
+do `nginx.conf`: sem ela, recarregar em `/receitas` daria 404 em vez de abrir o
+app. **As duas são necessárias**; mexer em uma sem a outra quebra o acesso por
+link ou o recarregamento.
+
+Repare que o `initialRoute: '/'` do `MaterialApp` **não** atrapalha: o
+`WidgetsApp` só o usa quando o `defaultRouteName` da plataforma é `/`, então a
+rota do navegador sempre ganha.
 
 **Sessão: `id_cliente` nunca pode ser 0** (`lib/widgets/guarda_sessao.dart`,
 `lib/services/sessao_store.dart`, `lib/services/global_state.dart`).
