@@ -5,6 +5,7 @@ import '../services/caixa_cache.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/auth_actions.dart';
+import '../utils/navegacao.dart';
 
 /// O menu lateral do app.
 ///
@@ -364,24 +365,10 @@ class AppDrawer extends StatelessWidget {
     final isSelected = currentRoute == route;
 
     void ir() {
-      if (currentRoute != route) {
-        _fecharGaveta(context);
-        // Troca a tela em foco **preservando a raiz**, que é o `AuthWrapper`.
-        // Com `pushReplacementNamed` a primeira navegação pelo menu substituía
-        // a própria raiz: a pilha ficava com a tela interna no lugar do
-        // wrapper, e aí o `popUntil(isFirst)` de quem volta ao login
-        // (`auth_actions.dart`, `GuardaSessao`) caía na própria tela interna em
-        // vez da tela de login.
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          route,
-          (rota) => rota.isFirst,
-        );
-      } else {
-        // Tocar o item da tela em foco só fecha a gaveta. Fixo, não há o que
-        // fechar nem para onde ir — o toque não faz nada.
-        _fecharGaveta(context);
-      }
+      // Fecha a gaveta nos dois casos. Fixo isto é no-op, e tocar o item da
+      // tela em foco não faz mais nada — quem decide é o `irParaDestino`.
+      _fecharGaveta(context);
+      irParaDestino(context, route);
     }
 
     if (_recolhido) {

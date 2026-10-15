@@ -30,6 +30,7 @@ import '../utils/app_tokens.dart';
 import '../utils/categoria_visuais.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/meses.dart';
+import '../utils/navegacao.dart';
 import '../utils/situacao_fluxo.dart';
 import 'charts/categorias_pie_chart.dart';
 import 'charts/fluxo_acumulado_chart.dart';
@@ -368,7 +369,7 @@ class CartaoNatureza extends StatelessWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: () => Navigator.pushNamed(context, _rota),
+                  onPressed: () => irParaDestino(context, _rota),
                   child: const Text('Ver todos'),
                 ),
               ],
@@ -380,7 +381,7 @@ class CartaoNatureza extends StatelessWidget {
                 categoria: categorias[fluxo.idCategoria ?? 0],
                 cor: cor,
                 hoje: hoje,
-                onTap: () => Navigator.pushNamed(context, _rota),
+                onTap: () => irParaDestino(context, _rota),
               ),
           ],
         ],

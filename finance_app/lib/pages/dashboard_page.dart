@@ -11,6 +11,7 @@ import 'package:finance_app/services/global_state.dart';
 import 'package:finance_app/services/logger_service.dart';
 import 'package:finance_app/utils/auth_actions.dart';
 import 'package:finance_app/utils/currency_formatter.dart';
+import 'package:finance_app/utils/navegacao.dart';
 import 'package:finance_app/widgets/boletos_widget.dart';
 import 'package:finance_app/widgets/cartoes_movimentacoes.dart';
 import 'package:finance_app/widgets/charts/cartao_grafico_mensal.dart';
@@ -217,6 +218,11 @@ class _DashboardPageState extends State<DashboardPage> {
   ) {
     return Scaffold(
       appBar: AppBar(
+        // Sem seta de voltar: estes seis são destinos de topo, e com a barra
+        // lateral à vista a seta não tem para onde levar — a pilha é só
+        // [raiz, destino]. Com a gaveta, `true` é o que desenha o botão de
+        // hambúrguer, que tem precedência sobre a seta.
+        automaticallyImplyLeading: menu.ehGaveta,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -796,7 +802,7 @@ class _DashboardPageState extends State<DashboardPage> {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: InkWell(
-        onTap: () => Navigator.pushNamed(context, route),
+        onTap: () => irParaDestino(context, route),
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Container(
           height: 80,

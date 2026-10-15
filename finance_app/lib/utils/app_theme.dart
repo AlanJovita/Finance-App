@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_colors_extension.dart';
 import 'app_tokens.dart';
+import 'transicao_pagina.dart';
 
 /// Tema do app. Os dois modos saem do mesmo [_buildTheme] — o que muda entre
 /// claro e escuro são as superfícies, as tintas de texto e a elevação.
@@ -65,6 +66,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
+
+      // Fade curto no lugar do zoom padrão da plataforma — ver
+      // `transicao_pagina.dart` para o porquê.
+      pageTransitionsTheme: transicoesDoApp,
 
       colorScheme: ColorScheme(
         brightness: brightness,

@@ -104,6 +104,30 @@ primeiro, porque ele é sempre a sessão mais recente. Chave corrompida ou com i
 todas as vezes. Credencial nunca entra em nenhum dos dois (nem senha, nem o
 token do link).
 
+**Os seis destinos do menu são irmãos de topo** (`utils/navegacao.dart`).
+Chegar em Receitas pelo menu lateral, pelo atalho do Resumo ou pelo "ver todos"
+de um card do painel tem de deixar a pilha igual: `[raiz, destino]`. Antes cada
+caminho fazia a sua própria chamada — o menu dava `pushNamedAndRemoveUntil`, os
+outros dois davam `pushNamed` — e a profundidade dependia do caminho percorrido
+(2 pelo menu, 3 pelo atalho). Use sempre `irParaDestino`; `Navigator.pushNamed`
+para uma dessas rotas é bug.
+
+**Por isso essas telas não têm seta de voltar**: `automaticallyImplyLeading:
+menu.ehGaveta` nas cinco. Com a barra lateral à vista a seta não tem para onde
+levar — abaixo só existe a raiz, que mostra o mesmo Resumo. No modo gaveta o
+valor é `true`, mas a seta continua não aparecendo: o `AppBar` desenha o botão
+da gaveta, que tem precedência. As telas de **detalhe** (`CaixaPage`,
+`CartaoMovimentosPage`) mantêm a seta, que ali é o único jeito de sair.
+
+**A transição é um fade de 120ms, em todas as plataformas**
+(`utils/transicao_pagina.dart`, ligado pelo `pageTransitionsTheme` do tema). O
+padrão do Flutter no Chrome/Windows é o `ZoomPageTransitionsBuilder`: 300ms de
+escala + opacidade que, para ser barato no celular, **rasteriza a página inteira
+num snapshot**. Num app com `fl_chart` em quase toda tela isso custa caro e é o
+que fazia a troca de tela parecer travada. A duração sai do próprio builder
+(`PageTransitionsBuilder.transitionDuration`), e não do `MaterialPageRoute`, cujo
+valor é fixo em 300ms.
+
 **O menu lateral preserva a raiz**: `AppDrawer` navega com
 `pushNamedAndRemoveUntil(rota, (r) => r.isFirst)`. Com o `pushReplacementNamed`
 que havia ali, a primeira navegação pelo menu substituía o próprio

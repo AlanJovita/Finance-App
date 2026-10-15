@@ -299,7 +299,14 @@ class _CartoesPageState extends State<CartoesPage> {
 
   Widget _buildScaffold(BuildContext context, MenuLateral menu) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Cartões de Crédito')),
+      appBar: AppBar(
+        // Sem seta de voltar: estes seis são destinos de topo, e com a barra
+        // lateral à vista a seta não tem para onde levar — a pilha é só
+        // [raiz, destino]. Com a gaveta, `true` é o que desenha o botão de
+        // hambúrguer, que tem precedência sobre a seta.
+        automaticallyImplyLeading: menu.ehGaveta,
+        title: const Text('Cartões de Crédito'),
+      ),
       drawer: menu.ehGaveta ? const AppDrawer() : null,
       floatingActionButton: FloatingActionButton(
         onPressed: _novoCartao,
