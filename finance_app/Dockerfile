@@ -1,5 +1,9 @@
 # Estágio 1 — build do Flutter Web
-FROM ghcr.io/cirruslabs/flutter:3.35.4 AS build
+# A tag tem de acompanhar o Flutter que resolveu o `pubspec.lock` (o rodapé
+# `sdks:` de lá diz o mínimo): o lock traz as versões exatas dos pacotes, e
+# imagem mais velha que elas faz o `pub get` falhar por SDK — foi o que
+# aconteceu quando o file_picker 13 passou a exigir Dart >= 3.10.
+FROM ghcr.io/cirruslabs/flutter:3.38.2 AS build
 
 WORKDIR /app
 
