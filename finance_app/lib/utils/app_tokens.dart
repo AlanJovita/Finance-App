@@ -45,6 +45,32 @@ abstract final class AppRadius {
   static const double xl = 10;
 }
 
+/// Medidas de **estrutura**: onde um layout troca de forma, e quanto ocupa a
+/// forma nova.
+///
+/// Separado de [AppSpacing] porque não é respiro, é arquitetura — e porque os
+/// dois números abaixo precisam concordar entre telas: a lista de lançamentos
+/// e o painel de resumo trocam de arranjo na **mesma** largura, senão a janela
+/// passa por um trecho em que uma tela já virou duas colunas e a outra não.
+abstract final class AppLayout {
+  /// A partir daqui a tela vira duas colunas: lista + formulário fixo nas
+  /// Receitas/Despesas, e as duas pilhas do Resumo.
+  ///
+  /// 1100 não é arbitrário: abaixo disso a coluna da lista fica com menos de
+  /// 600px úteis, e o card de lançamento começa a cortar a trilha de categoria
+  /// — o aperto que o `CardFluxo` passa a vida evitando.
+  static const double duasColunas = 1100;
+
+  /// Largura do formulário quando ele está fixo na lateral. Estreito o
+  /// bastante para a lista continuar sendo a protagonista, largo o bastante
+  /// para os campos não quebrarem em duas linhas.
+  static const double painelLateral = 420;
+
+  /// Teto de largura de um bloco de conteúdo centralizado. Acima disso o olho
+  /// percorre a linha inteira para ler um par rótulo/valor.
+  static const double conteudoMaximo = 1400;
+}
+
 /// Superfícies escuras precisam de mais elevação que as claras para se separarem
 /// do fundo — daí cada papel ter um par: o valor claro e sua contraparte escura.
 abstract final class AppElevation {

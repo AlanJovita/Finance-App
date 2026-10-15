@@ -33,16 +33,27 @@ class CartoesCache {
   ///
   /// Falha de rede **não** é guardada: devolve lista vazia e deixa o cache vazio,
   /// para a tentativa seguinte tentar de novo.
-  Future<List<Cartao>> obter({bool recarregar = false}) async {
-    if (!recarregar && _cartoes != null) return _cartoes!;
+  /// Falha de rede **não** escapa para quem chamou: o pedido que vai para o
+  /// [_emVoo] é o **já tratado**, e não o cru.
+  ///
+  /// A diferença não é estilo. Guardando o pedido cru, o `try` protegia apenas
+  /// o primeiro chamador: o segundo entrava pelo "já tem um em voo", recebia a
+  /// promessa que falha e a exceção estourava do lado dele, sem tratamento. Era
+  /// o que acontecia quando a tela e o modal pediam a lista ao mesmo tempo.
+  Future<List<Cartao>> obter({bool recarregar = false}) {
+    if (!recarregar && _cartoes != null) return Future.value(_cartoes!);
 
-    if (_emVoo != null) return _emVoo!;
+    final emVoo = _emVoo;
+    if (emVoo != null) return emVoo;
 
-    final pedido = _api.listCartoes();
+    final pedido = _buscar();
     _emVoo = pedido;
+    return pedido;
+  }
 
+  Future<List<Cartao>> _buscar() async {
     try {
-      final cartoes = await pedido;
+      final cartoes = await _api.listCartoes();
       _cartoes = cartoes;
       return cartoes;
     } catch (_) {

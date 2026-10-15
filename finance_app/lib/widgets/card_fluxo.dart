@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/categoria.dart';
+import '../models/conta.dart';
 import '../models/fluxo_caixa.dart';
 import '../models/subcategoria.dart';
 import '../utils/app_colors_extension.dart';
@@ -16,13 +17,26 @@ import 'icone_categoria.dart';
 /// (que instancia `ApiService` no `initState`) — o aperto horizontal deste card
 /// é o detalhe mais frágil da tela e precisa ser verificável.
 ///
-/// Recebe a categoria e a subcategoria já resolvidas: quem tem os mapas é a
-/// página, e refazer a busca por item seria um `firstWhere` por card a cada
-/// rebuild da lista.
+/// Recebe a categoria, a subcategoria e a conta já resolvidas: quem tem os
+/// mapas é a página, e refazer a busca por item seria um `firstWhere` por card
+/// a cada rebuild da lista.
+///
+/// **O que o card diz, e onde.** A marca à esquerda é a categoria, com um selo
+/// de situação mordendo o canto: confirmado, atrasado, vence hoje. A linha de
+/// baixo é a trilha (`Categoria › Subcategoria · 05/10`) e, à direita, a conta
+/// bancária do lançamento. Antes o selo era a subcategoria e o chip era a
+/// situação — a situação é o que se lê de relance numa lista de contas a pagar,
+/// e a subcategoria continua escrita na trilha.
 class CardFluxo extends StatelessWidget {
   final FluxoCaixa fluxo;
   final Categoria? categoria;
   final Subcategoria? subcategoria;
+
+  /// Conta bancária do lançamento, já resolvida. Nula quando o lançamento não
+  /// tem conta (`id_conta = 0`, o padrão) ou quando a loja não cadastrou
+  /// nenhuma — nos dois casos o chip não aparece, porque "Sem conta" na maioria
+  /// das linhas seria só ruído.
+  final Conta? conta;
 
   /// Cor do valor: sucesso para receita, erro para despesa.
   final Color corValor;
@@ -49,6 +63,7 @@ class CardFluxo extends StatelessWidget {
     required this.fluxo,
     required this.categoria,
     required this.subcategoria,
+    this.conta,
     required this.corValor,
     required this.rotuloAcao,
     required this.onEditar,
@@ -87,8 +102,7 @@ class CardFluxo extends StatelessWidget {
               IconeCategoria(
                 iconeCategoria: categoria?.icone,
                 corCategoria: corCategoria,
-                iconeSubcategoria: subcategoria?.icone,
-                temSubcategoria: subcategoria != null,
+                badge: _seloSituacao(theme, cores, situacao),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -103,7 +117,7 @@ class CardFluxo extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    _buildLinhaSecundaria(theme, cores, situacao),
+                    _buildLinhaSecundaria(theme, cores),
                   ],
                 ),
               ),
@@ -131,25 +145,18 @@ class CardFluxo extends StatelessWidget {
     );
   }
 
-  /// Trilha da categoria, data e situação — a linha que mais disputa espaço.
+  /// Trilha da categoria, data e conta — a linha que mais disputa espaço.
   ///
-  /// O chip não é flexível, para ficar inteiro enquanto houver espaço e empurrar
-  /// o encolhimento para a trilha. O teto de largura cobre o caso em que nem ele
-  /// caberia sozinho — "Próximo do vencimento" num celular estreito — que sem
-  /// isso viraria overflow em vez de reticências.
-  Widget _buildLinhaSecundaria(
-    ThemeData theme,
-    AppColors cores,
-    SituacaoFluxo situacao,
-  ) {
+  /// Os dois textos são de comprimento imprevisível (nome de categoria e nome
+  /// de conta), então os dois cedem: a trilha primeiro, porque a categoria já
+  /// está dita pelo círculo colorido à esquerda. No apertado a trilha fica só
+  /// com a data — que é a informação que nada mais no card repete.
+  Widget _buildLinhaSecundaria(ThemeData theme, AppColors cores) {
     return LayoutBuilder(
       builder: (context, limites) {
-        // Apertado, o nome da categoria sai e fica só a data: a categoria já
-        // está dita pelo círculo colorido à esquerda, enquanto a situação não
-        // tem outra representação no card. Antes disto os dois disputavam a
-        // linha e o status saía cortado em "Próx. …".
         final compacto = limites.maxWidth < 210;
         final trilha = _trilha(apenasData: compacto);
+        final chip = _buildChipConta(theme);
 
         final texto = Text(
           trilha,
@@ -159,26 +166,18 @@ class CardFluxo extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         );
-        final chip = _buildChipSituacao(theme, cores, situacao, compacto);
 
-        // Quem encolhe é sempre o de comprimento imprevisível. No modo largo é
-        // a trilha, que carrega nomes de categoria de qualquer tamanho; no
-        // compacto ela já é só "06/10", então fixá-la e deixar o chip ceder
-        // garante que a data saia inteira e ainda sobre espaço para o status.
         return Row(
           children: [
-            if (trilha.isNotEmpty) ...[
-              compacto ? texto : Flexible(child: texto),
+            if (trilha.isNotEmpty) Flexible(child: texto),
+            if (trilha.isNotEmpty && chip != null)
               const SizedBox(width: AppSpacing.xs),
-            ],
-            compacto
-                ? Flexible(child: chip)
-                : ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: limites.maxWidth * 0.72,
-                  ),
-                  child: chip,
-                ),
+            // Teto de largura para o chip não empurrar a data para fora quando
+            // a conta tem nome comprido: aí ele que sai em reticências.
+            if (chip != null)
+              Flexible(
+                child: Align(alignment: Alignment.centerLeft, child: chip),
+              ),
           ],
         );
       },
@@ -209,41 +208,64 @@ class CardFluxo extends StatelessWidget {
     return partes.join(' · ');
   }
 
-  Widget _buildChipSituacao(
+  /// O selo de situação, mordendo o canto da marca da categoria.
+  ///
+  /// Cor cheia com o glifo em branco, e não o tratamento tonal dos círculos de
+  /// categoria: aqui ele precisa ler como **estado**, não como uma segunda
+  /// categoria. O anel na cor da superfície do card é o que o descola do
+  /// círculo de trás quando as duas cores são próximas.
+  ///
+  /// Sem rótulo: são seis estados com ícone e cor próprios, e o nome deles
+  /// ocupava a linha de baixo inteira — que agora é da conta. Quem precisar do
+  /// nome tem o tooltip.
+  Widget _seloSituacao(
     ThemeData theme,
     AppColors cores,
     SituacaoFluxo situacao,
-    bool compacto,
   ) {
     final cor = situacao.cor(cores);
 
-    return Container(
-      // No celular o chip se aperta até o limite do legível: cada pixel de
-      // respiro aqui é um caractere a menos de reticências no rótulo.
-      padding: EdgeInsets.symmetric(
-        horizontal: compacto ? 5 : AppSpacing.sm,
-        vertical: 1,
+    return Tooltip(
+      message: situacao.rotulo,
+      child: Container(
+        width: 16,
+        height: 16,
+        decoration: BoxDecoration(
+          color: cor,
+          shape: BoxShape.circle,
+          border: Border.all(color: theme.cardColor, width: 2),
+        ),
+        child: Icon(situacao.icone, size: 9, color: Colors.white),
       ),
+    );
+  }
+
+  /// A conta bancária do lançamento. `null` quando não há conta — e aí a linha
+  /// de baixo fica só com a trilha, sem chip vazio ocupando espaço.
+  Widget? _buildChipConta(ThemeData theme) {
+    final nome = conta?.descricao.trim() ?? '';
+    if (nome.isEmpty) return null;
+
+    final cor = theme.colorScheme.onSurfaceVariant;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.12),
+        // Neutro de propósito: a cor do card já está comprometida com o valor
+        // (receita/despesa) e com o selo de situação. Um terceiro tom colorido
+        // aqui tiraria a hierarquia dos outros dois.
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(situacao.icone, size: 11, color: cor),
-          SizedBox(width: compacto ? 3 : AppSpacing.xs),
-          // Flexível para respeitar o teto imposto acima: sem isto o
-          // `mainAxisSize.min` do Row ignoraria a restrição e estouraria.
+          Icon(Icons.account_balance, size: 11, color: cor),
+          const SizedBox(width: AppSpacing.xs),
           Flexible(
             child: Text(
-              // Só o celular recebe a forma abreviada; onde há largura, o
-              // rótulo aparece por extenso.
-              compacto ? situacao.rotuloCurto : situacao.rotulo,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: cor,
-                fontWeight: FontWeight.w600,
-              ),
+              nome,
+              style: theme.textTheme.labelSmall?.copyWith(color: cor),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

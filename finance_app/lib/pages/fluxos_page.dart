@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../models/categoria.dart';
+import '../models/conta.dart';
 import '../models/fluxo_caixa.dart';
 import '../models/resumo_fluxo.dart';
 import '../models/subcategoria.dart';
 import '../services/api_service.dart';
+import '../services/contas_cache.dart';
 import '../services/logger_service.dart';
 import '../services/global_state.dart';
 import '../utils/app_colors_extension.dart';
 import '../utils/app_tokens.dart';
 import '../utils/categoria_visuais.dart';
 import '../utils/currency_formatter.dart';
+import '../utils/filtro_fluxos.dart';
 import '../utils/meses.dart';
 import '../utils/responsive_utils.dart';
 import '../utils/situacao_fluxo.dart';
@@ -101,6 +104,20 @@ class _FluxosPageState extends State<FluxosPage> {
   /// 0 já significa ausência de categoria.
   int _categoriaFiltro = 0;
 
+  /// Conta em foco. `null` é "todas" — e 0 **não** é vazio aqui: é o filtro
+  /// "sem conta", que é o estado de todo lançamento que nunca escolheu uma (e
+  /// de tudo que vem do PDV). Daí o nulo em vez do 0 das outras convenções.
+  int? _contaFiltro;
+
+  /// Situação em foco (`null` é "todas"). Calculada no cliente, como o resto
+  /// dos filtros desta tela: a lista do mês já está em memória.
+  SituacaoFluxo? _situacaoFiltro;
+
+  /// Contas da loja, por id. Serve ao card (que mostra o nome da conta de cada
+  /// lançamento) e ao filtro. Vem do [ContasCache] — carregado uma vez por
+  /// sessão, então a tela não ganha requisição nenhuma por isso.
+  Map<int, Conta> _contas = const {};
+
   /// Totais por mês (`/fluxo/resumo/mensal`): some uns bytes e diz em quais
   /// meses há lançamento, sem baixar nenhum deles. Alimenta o atalho de meses
   /// e revela se existe algo no grupo "sem data".
@@ -124,6 +141,31 @@ class _FluxosPageState extends State<FluxosPage> {
   Map<int, Categoria> _categorias = {};
   Map<int, Subcategoria> _subcategorias = {};
 
+  // ── formulário fixo na lateral ──────────────────────────────────────────
+  //
+  // Em tela larga o lançamento não é modal: o formulário fica encostado à
+  // direita, sempre visível, e "abrir o formulário" passa a ser trocar o que
+  // está em foco nele. Abaixo de [AppLayout.duasColunas] nada disso existe e a
+  // tela volta ao botão flutuante + modal.
+
+  /// O lançamento em foco no painel. `null` é "novo".
+  FluxoCaixa? _formPainel;
+  bool _clonarPainel = false;
+
+  /// Entra na `key` do painel: trocar o alvo (ou pedir para limpar) precisa
+  /// **recriar** o `State` do formulário, senão os campos da edição anterior
+  /// ficam lá. Gravar com "continuar" não mexe nisto — é justamente o caso em
+  /// que o formulário tem de sobreviver.
+  int _painelGeracao = 0;
+
+  /// Cabe a lista **e** o formulário ao lado?
+  ///
+  /// Lido do `MediaQuery` a cada uso, e não guardado: a janela de um navegador
+  /// muda de tamanho, e um booleano calculado uma vez deixaria a tela no
+  /// arranjo errado depois do primeiro redimensionamento.
+  bool get _comPainel =>
+      MediaQuery.sizeOf(context).width >= AppLayout.duasColunas;
+
   TipoFluxo get _tipo => widget.tipo;
 
   /// Lado do botão quadrado e altura dos controles da barra. O atalho de
@@ -139,6 +181,7 @@ class _FluxosPageState extends State<FluxosPage> {
 
     _carregarResumoMeses();
     _carregarCategorias();
+    _carregarContas();
     _carregarMes(_chave(_mes));
   }
 
@@ -236,8 +279,7 @@ class _FluxosPageState extends State<FluxosPage> {
 
       if (!mounted) return;
       setState(() {
-        _semData =
-            pagina.itens.where((f) => f.dataVencimento == null).toList();
+        _semData = pagina.itens.where((f) => f.dataVencimento == null).toList();
       });
     } catch (e, s) {
       debugPrint('Erro ao carregar lançamentos sem data: $e');
@@ -285,6 +327,19 @@ class _FluxosPageState extends State<FluxosPage> {
     }
   }
 
+  /// As contas da loja, para o card resolver `id_conta` em nome e para o
+  /// filtro ter o que listar.
+  ///
+  /// Falha não derruba a tela: o cache devolve lista vazia, o chip de conta não
+  /// aparece em card nenhum e o filtro de conta fica sem opções — a lista
+  /// continua de pé, que é o que importa aqui.
+  Future<void> _carregarContas() async {
+    final contas = await ContasCache().obter();
+    if (!mounted) return;
+
+    setState(() => _contas = {for (final c in contas) c.id: c});
+  }
+
   /// Recarrega depois de gravar pelo formulário, acompanhando o lançamento.
   ///
   /// Mudar o vencimento muda o mês da conta. Sem seguir a data, a tela ficaria
@@ -329,29 +384,56 @@ class _FluxosPageState extends State<FluxosPage> {
   /// despesa nunca cairia numa categoria de receita.
   List<Categoria> get _categoriasDoTipo {
     final lista =
-        _categorias.values
-            .where((c) => c.tipoFluxo == _tipo.codigo)
-            .toList();
+        _categorias.values.where((c) => c.tipoFluxo == _tipo.codigo).toList();
     lista.sort((a, b) => a.descricao.compareTo(b.descricao));
     return lista;
   }
 
-  bool get _temFiltro => _busca.trim().isNotEmpty || _categoriaFiltro != 0;
+  bool get _temFiltro =>
+      _busca.trim().isNotEmpty ||
+      _categoriaFiltro != 0 ||
+      _contaFiltro != null ||
+      _situacaoFiltro != null;
 
+  /// Quantos dos três filtros de menu estão ativos. A busca fica fora: ela tem
+  /// o próprio campo à vista, e não precisa ser contada num badge.
+  int get _filtrosAtivos =>
+      (_categoriaFiltro != 0 ? 1 : 0) +
+      (_contaFiltro != null ? 1 : 0) +
+      (_situacaoFiltro != null ? 1 : 0);
+
+  void _limparFiltros() {
+    setState(() {
+      _categoriaFiltro = 0;
+      _contaFiltro = null;
+      _situacaoFiltro = null;
+    });
+  }
+
+  /// Tudo que o mês em foco tem **antes** de qualquer filtro.
+  ///
+  /// É a base dos menus de filtro: contar as opções sobre a lista já filtrada
+  /// esvaziaria as outras no instante em que uma fosse escolhida.
+  List<FluxoCaixa> get _itensBrutos => [
+    ...(_itensPorMes[_chave(_mes)] ?? const <FluxoCaixa>[]),
+    ...(_semData ?? const <FluxoCaixa>[]),
+  ];
+
+  /// O predicado mora em `utils/filtro_fluxos.dart`: as convenções de "vazio"
+  /// dos quatro filtros não são iguais (0 não filtra em categoria, mas filtra
+  /// em conta), e isso precisa ser verificável sem subir a tela.
   List<FluxoCaixa> _filtrar(List<FluxoCaixa> itens) {
-    final termo = CategoriaVisuais.semAcento(_busca.trim().toLowerCase());
-
-    return itens.where((f) {
-      if (_categoriaFiltro != 0 && (f.idCategoria ?? 0) != _categoriaFiltro) {
-        return false;
-      }
-      if (termo.isEmpty) return true;
-
-      final descricao = CategoriaVisuais.semAcento(
-        (f.descricao ?? '').toLowerCase(),
-      );
-      return descricao.contains(termo);
-    }).toList();
+    return itens
+        .where(
+          (f) => fluxoPassaNoFiltro(
+            f,
+            termo: _busca,
+            categoria: _categoriaFiltro,
+            conta: _contaFiltro,
+            situacao: _situacaoFiltro,
+          ),
+        )
+        .toList();
   }
 
   List<FluxoCaixa> get _itensDoMes =>
@@ -367,10 +449,21 @@ class _FluxosPageState extends State<FluxosPage> {
 
   /// Abre o formulário: sem [fluxo] para criar, com ele para editar, e com
   /// [clonar] para criar a partir de um molde já preenchido.
+  ///
+  /// Em tela larga não abre nada: troca o que o painel da lateral está
+  /// mostrando. O resto da tela — card, menu, botão — não precisa saber em qual
+  /// dos dois arranjos está.
   void _showFormDialog({FluxoCaixa? fluxo, bool clonar = false}) {
-    // O clone grava um lançamento novo: para a mensagem e para o recarregar, o
-    // que importa é que **não** é edição.
-    final ehEdicao = fluxo != null && !clonar;
+    if (_comPainel) {
+      setState(() {
+        _formPainel = fluxo;
+        _clonarPainel = clonar;
+        // Sempre: pedir o mesmo alvo de novo (ou um novo lançamento com o
+        // painel já preenchido) tem de dar um formulário limpo.
+        _painelGeracao++;
+      });
+      return;
+    }
 
     showDialog(
       context: context,
@@ -379,39 +472,92 @@ class _FluxosPageState extends State<FluxosPage> {
           tipoFluxo: _tipo.tipoDialogo,
           fluxo: fluxo,
           clonar: clonar,
-          onSave: (vencimento, parcelasReplicadas) {
-            // Quem fecha o modal é ele mesmo: no "salvar e continuar" ele
-            // grava e **fica aberto** para o próximo lançamento, e só ele sabe
-            // qual dos dois botões foi tocado. Aqui a tela só se atualiza — o
-            // que, com o modal aberto, é a única confirmação visível de que o
-            // lançamento anterior entrou.
-            _recarregarApos(vencimento);
-            // O formulário fechava calado: sem confirmação, "não atualizou" e
-            // "não gravou" ficavam indistinguíveis para quem está olhando.
-            //
-            // Quando houve replicação a contagem entra na mensagem: as outras
-            // parcelas podem estar em meses que não estão à vista, e aí o card
-            // recarregado não serve de comprovante.
-            ScaffoldMessenger.of(this.context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  !ehEdicao
-                      ? '${_tipo.singular[0].toUpperCase()}'
-                          '${_tipo.singular.substring(1)} '
-                          '${clonar ? 'duplicada' : 'criada'}.'
-                      : parcelasReplicadas > 0
-                      ? 'Alterações salvas e replicadas para '
-                          '$parcelasReplicadas '
-                          '${parcelasReplicadas == 1 ? 'parcela' : 'parcelas'}.'
-                      : 'Alterações salvas.',
-                ),
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 2),
+          // Quem fecha o modal é ele mesmo: no "salvar e continuar" ele grava e
+          // **fica aberto** para o próximo lançamento, e só ele sabe qual dos
+          // dois botões foi tocado.
+          onSave:
+              (vencimento, parcelasReplicadas) => _aposSalvar(
+                vencimento,
+                parcelasReplicadas,
+                ehEdicao: fluxo != null && !clonar,
+                clonar: clonar,
               ),
-            );
-          },
         );
       },
+    );
+  }
+
+  /// Atualiza a tela e confirma a gravação — o mesmo nos dois arranjos.
+  ///
+  /// A tela recarrega em toda gravação, inclusive nas que mantêm o formulário
+  /// aberto: é a única confirmação visível de que a anterior entrou. A mensagem
+  /// existe porque o formulário fechava calado, e aí "não atualizou" e "não
+  /// gravou" ficavam indistinguíveis para quem está olhando.
+  ///
+  /// Quando houve replicação a contagem entra na mensagem: as outras parcelas
+  /// podem estar em meses que não estão à vista, e aí o card recarregado não
+  /// serve de comprovante.
+  void _aposSalvar(
+    DateTime? vencimento,
+    int parcelasReplicadas, {
+    required bool ehEdicao,
+    required bool clonar,
+  }) {
+    _recarregarApos(vencimento);
+
+    // No painel, terminar uma edição devolve o formulário em branco: a edição
+    // acabou, e deixá-la na tela sugeriria que ainda há algo pendente nela.
+    if (ehEdicao && _comPainel) _limparPainel();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          !ehEdicao
+              ? '${_tipo.singular[0].toUpperCase()}'
+                  '${_tipo.singular.substring(1)} '
+                  '${clonar ? 'duplicada' : 'criada'}.'
+              : parcelasReplicadas > 0
+              ? 'Alterações salvas e replicadas para '
+                  '$parcelasReplicadas '
+                  '${parcelasReplicadas == 1 ? 'parcela' : 'parcelas'}.'
+              : 'Alterações salvas.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Devolve o painel ao estado de lançamento novo, em branco.
+  void _limparPainel() {
+    setState(() {
+      _formPainel = null;
+      _clonarPainel = false;
+      _painelGeracao++;
+    });
+  }
+
+  /// O formulário da lateral.
+  ///
+  /// A `key` é o que faz o `State` ser recriado quando o alvo muda — ver
+  /// [_painelGeracao].
+  Widget _buildPainelFormulario() {
+    final fluxo = _formPainel;
+
+    return FluxoFormDialog(
+      key: ValueKey('painel-${fluxo?.id ?? 0}-$_clonarPainel-$_painelGeracao'),
+      tipoFluxo: _tipo.tipoDialogo,
+      fluxo: fluxo,
+      clonar: _clonarPainel,
+      apresentacao: ApresentacaoFluxo.painel,
+      onFechar: _limparPainel,
+      onSave:
+          (vencimento, parcelasReplicadas) => _aposSalvar(
+            vencimento,
+            parcelasReplicadas,
+            ehEdicao: fluxo != null && !_clonarPainel,
+            clonar: _clonarPainel,
+          ),
     );
   }
 
@@ -601,31 +747,55 @@ class _FluxosPageState extends State<FluxosPage> {
 
   @override
   Widget build(BuildContext context) {
+    final comPainel = _comPainel;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_tipo.titulo),
         actions: [_buildBotaoDetalhes()],
       ),
       drawer: const AppDrawer(),
-      body: Column(
+      body: Row(
         children: [
-          _buildBarraFiltros(),
-          Expanded(child: _buildLista()),
+          Expanded(
+            child: Column(
+              children: [
+                _buildBarraFiltros(),
+                Expanded(child: _buildLista()),
+                // Com o painel ao lado, o resumo do mês desce para dentro da
+                // coluna da lista: ele soma **a lista**, e esticá-lo por baixo
+                // do formulário faria os totais parecerem do painel também. Sem
+                // painel ele continua barra do Scaffold, que é o que mantém o
+                // botão flutuante acima dele em vez de tapando os totais.
+                if (comPainel) _buildResumoRodape(),
+              ],
+            ),
+          ),
+          if (comPainel) ...[
+            const VerticalDivider(width: 1),
+            SizedBox(
+              width: AppLayout.painelLateral,
+              child: _buildPainelFormulario(),
+            ),
+          ],
         ],
       ),
-      // O resumo é barra do Scaffold, não o último filho do corpo: é o que faz
-      // o botão flutuante parar acima dele em vez de tapar os totais.
-      bottomNavigationBar: _buildResumoRodape(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showFormDialog(),
-        tooltip: 'Nova ${_tipo.singular}',
-        backgroundColor: _tipo.cor(context.appColors),
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        child: const Icon(Icons.add),
-      ),
+      bottomNavigationBar: comPainel ? null : _buildResumoRodape(),
+      // Sem botão flutuante quando o formulário já está na tela: ele abriria
+      // um modal por cima de um formulário aberto.
+      floatingActionButton:
+          comPainel
+              ? null
+              : FloatingActionButton(
+                onPressed: () => _showFormDialog(),
+                tooltip: 'Nova ${_tipo.singular}',
+                backgroundColor: _tipo.cor(context.appColors),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: const Icon(Icons.add),
+              ),
     );
   }
 
@@ -709,6 +879,12 @@ class _FluxosPageState extends State<FluxosPage> {
     );
   }
 
+  /// `[mês] [busca] [categoria][conta][situação]`.
+  ///
+  /// Os três filtros são quadrados do mesmo tamanho, encostados: a fileira lê
+  /// como um grupo de controles irmãos, e a busca fica com toda a largura que
+  /// sobra. Antes o filtro de categoria era uma caixa de 200px com o nome
+  /// dentro, o que comia a busca e não tinha irmão com que se alinhar.
   Widget _buildBarraLarga() {
     return Row(
       children: [
@@ -716,7 +892,11 @@ class _FluxosPageState extends State<FluxosPage> {
         const SizedBox(width: AppSpacing.md),
         Expanded(child: _buildBusca()),
         const SizedBox(width: AppSpacing.md),
-        _buildFiltroCategoria(apenasIcone: false),
+        _buildFiltroCategoria(),
+        const SizedBox(width: AppSpacing.xs),
+        _buildFiltroConta(),
+        const SizedBox(width: AppSpacing.xs),
+        _buildFiltroSituacao(),
       ],
     );
   }
@@ -737,10 +917,11 @@ class _FluxosPageState extends State<FluxosPage> {
           visualDensity: VisualDensity.compact,
           onPressed: () => setState(() => _buscaAberta = true),
         ),
-        Expanded(
-          child: Center(child: _buildNavegadorMes(larguraRotulo: 132)),
-        ),
-        _buildFiltroCategoria(apenasIcone: true),
+        Expanded(child: Center(child: _buildNavegadorMes(larguraRotulo: 132))),
+        // Um quadrado só: três mais a lupa e o seletor de mês não cabem em
+        // 360px sem espremer o nome do mês. Ele abre a folha com os três
+        // filtros, que é onde o celular tem espaço de sobra.
+        _buildBotaoFolhaFiltros(),
       ],
     );
   }
@@ -812,16 +993,13 @@ class _FluxosPageState extends State<FluxosPage> {
                 ],
               ),
             ),
-          if (!noMesAtual && comLancamento.isNotEmpty)
-            const PopupMenuDivider(),
+          if (!noMesAtual && comLancamento.isNotEmpty) const PopupMenuDivider(),
           for (final m in comLancamento)
             PopupMenuItem(
               value: m.chave,
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(_rotuloMes(DateTime(m.ano!, m.mes!))),
-                  ),
+                  Expanded(child: Text(_rotuloMes(DateTime(m.ano!, m.mes!)))),
                   const SizedBox(width: AppSpacing.md),
                   Text(
                     '${m.quantidade}',
@@ -909,45 +1087,79 @@ class _FluxosPageState extends State<FluxosPage> {
     );
   }
 
-  Widget _buildFiltroCategoria({required bool apenasIcone}) {
+  // ------------------------------------------------------------- filtros
+  //
+  // Três filtros, três quadrados do mesmo tamanho: categoria, conta e situação.
+  // A caixa compartilhada ([_molduraFiltro]) é o que faz a fileira ler como um
+  // grupo de controles irmãos — e é também o que a mantém alinhada com o botão
+  // de detalhes da AppBar, que usa a mesma medida.
+  //
+  // Todos filtram **no cliente**, sobre a lista do mês que já está em memória:
+  // nenhum deles dispara requisição.
+
+  /// A moldura dos três: quadrado de [_alturaControle], borda e glifo acesos
+  /// quando o filtro está ativo.
+  Widget _molduraFiltro({
+    required IconData icone,
+    required bool ativo,
+    required Color corAtiva,
+  }) {
+    final theme = Theme.of(context);
+
+    return Container(
+      height: _alturaControle,
+      width: _alturaControle,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: ativo ? corAtiva : theme.dividerColor),
+        // O preenchimento fraquinho é o que distingue "tem filtro" de "não
+        // tem" num relance, sem precisar comparar as bordas uma com a outra.
+        color: ativo ? corAtiva.withValues(alpha: 0.08) : null,
+      ),
+      child: Icon(
+        icone,
+        size: 18,
+        color: ativo ? corAtiva : theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  /// Item de menu dos filtros: glifo, rótulo e, quando há, a contagem à direita.
+  PopupMenuItem<T> _itemFiltro<T>({
+    required T valor,
+    required IconData icone,
+    required Color corIcone,
+    required String rotulo,
+    int? quantidade,
+  }) {
+    final theme = Theme.of(context);
+
+    return PopupMenuItem<T>(
+      value: valor,
+      child: Row(
+        children: [
+          Icon(icone, size: 16, color: corIcone),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(rotulo, overflow: TextOverflow.ellipsis)),
+          if (quantidade != null) ...[
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              '$quantidade',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiltroCategoria() {
     final theme = Theme.of(context);
     final cores = context.appColors;
     final ativa = _categorias[_categoriaFiltro];
-
-    final itens = <PopupMenuEntry<int>>[
-      PopupMenuItem(
-        value: 0,
-        child: Row(
-          children: [
-            Icon(
-              Icons.clear_all,
-              size: 16,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            const Text('Todas as categorias'),
-          ],
-        ),
-      ),
-      if (_categoriasDoTipo.isNotEmpty) const PopupMenuDivider(),
-      for (final c in _categoriasDoTipo)
-        PopupMenuItem(
-          value: c.id!,
-          child: Row(
-            children: [
-              Icon(
-                CategoriaVisuais.icone(c.icone),
-                size: 16,
-                color: CategoriaVisuais.cor(c.cor),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(c.descricao, overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-        ),
-    ];
 
     return PopupMenuButton<int>(
       tooltip: 'Filtrar por categoria',
@@ -956,54 +1168,351 @@ class _FluxosPageState extends State<FluxosPage> {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       onSelected: (id) => setState(() => _categoriaFiltro = id),
-      itemBuilder: (context) => itens,
-      child: Container(
-        height: _alturaControle,
-        width: apenasIcone ? _alturaControle : 200,
-        padding: EdgeInsets.symmetric(
-          horizontal: apenasIcone ? 0 : AppSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(
-            color: ativa == null ? theme.dividerColor : cores.info,
-          ),
-        ),
-        child:
-            apenasIcone
-                ? Icon(
-                  Icons.filter_alt,
-                  size: 18,
-                  color:
-                      ativa == null
-                          ? theme.colorScheme.onSurfaceVariant
-                          : cores.info,
-                )
-                : Row(
-                  children: [
-                    Icon(
-                      ativa == null
-                          ? Icons.filter_alt_outlined
-                          : CategoriaVisuais.icone(ativa.icone),
-                      size: 16,
-                      color:
-                          ativa == null
-                              ? theme.colorScheme.onSurfaceVariant
-                              : CategoriaVisuais.cor(ativa.cor),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        ativa?.descricao ?? 'Todas as categorias',
-                        style: theme.textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, size: 18),
-                  ],
-                ),
+      itemBuilder:
+          (context) => [
+            _itemFiltro(
+              valor: 0,
+              icone: Icons.clear_all,
+              corIcone: theme.colorScheme.onSurfaceVariant,
+              rotulo: 'Todas as categorias',
+            ),
+            if (_categoriasDoTipo.isNotEmpty) const PopupMenuDivider(),
+            for (final c in _categoriasDoTipo)
+              _itemFiltro(
+                valor: c.id!,
+                icone: CategoriaVisuais.icone(c.icone),
+                corIcone: CategoriaVisuais.cor(c.cor),
+                rotulo: c.descricao,
+              ),
+          ],
+      // Ativo, o quadrado mostra o ícone e a cor da própria categoria: é mais
+      // direto que um ícone genérico de filtro aceso.
+      child: _molduraFiltro(
+        icone:
+            ativa == null
+                ? Icons.local_offer_outlined
+                : CategoriaVisuais.icone(ativa.icone),
+        ativo: ativa != null,
+        corAtiva: ativa == null ? cores.info : CategoriaVisuais.cor(ativa.cor),
       ),
+    );
+  }
+
+  /// Contagem por conta no mês em foco. A chave 0 é "sem conta".
+  Map<int, int> get _quantidadePorConta {
+    final mapa = <int, int>{};
+    for (final f in _itensBrutos) {
+      final id = f.idConta ?? 0;
+      mapa[id] = (mapa[id] ?? 0) + 1;
+    }
+    return mapa;
+  }
+
+  /// O menu lista só as contas que **aparecem** no mês, com a contagem de cada
+  /// uma. Oferecer as 8 contas cadastradas quando 7 não têm lançamento no mês
+  /// seria oferecer 7 listas vazias.
+  Widget _buildFiltroConta() {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+    final quantidade = _quantidadePorConta;
+    final ativa = _contaFiltro;
+
+    final ids =
+        quantidade.keys.where((id) => id != 0).toList()..sort(
+          (a, b) => (_contas[a]?.descricao ?? '').compareTo(
+            _contas[b]?.descricao ?? '',
+          ),
+        );
+
+    return PopupMenuButton<int?>(
+      tooltip: 'Filtrar por conta',
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      onSelected: (id) => setState(() => _contaFiltro = id),
+      itemBuilder:
+          (context) => [
+            _itemFiltro<int?>(
+              valor: null,
+              icone: Icons.clear_all,
+              corIcone: theme.colorScheme.onSurfaceVariant,
+              rotulo: 'Todas as contas',
+            ),
+            if (quantidade.isNotEmpty) const PopupMenuDivider(),
+            for (final id in ids)
+              _itemFiltro<int?>(
+                valor: id,
+                icone: Icons.account_balance,
+                corIcone: cores.info,
+                rotulo: _contas[id]?.descricao ?? 'Conta $id',
+                quantidade: quantidade[id],
+              ),
+            // "Sem conta" é um filtro de verdade, não ausência de filtro: é o
+            // estado de todo lançamento que nunca escolheu conta e de tudo que
+            // vem do PDV.
+            if (quantidade.containsKey(0))
+              _itemFiltro<int?>(
+                valor: 0,
+                icone: Icons.block,
+                corIcone: theme.colorScheme.onSurfaceVariant,
+                rotulo: 'Sem conta',
+                quantidade: quantidade[0],
+              ),
+          ],
+      child: _molduraFiltro(
+        icone: Icons.account_balance_outlined,
+        ativo: ativa != null,
+        corAtiva: cores.info,
+      ),
+    );
+  }
+
+  /// Contagem por situação no mês em foco, na ordem do enum.
+  Map<SituacaoFluxo, int> get _quantidadePorSituacao {
+    final mapa = <SituacaoFluxo, int>{};
+    for (final f in _itensBrutos) {
+      final s = SituacaoFluxo.de(f);
+      mapa[s] = (mapa[s] ?? 0) + 1;
+    }
+    return {
+      for (final s in SituacaoFluxo.values)
+        if (mapa.containsKey(s)) s: mapa[s]!,
+    };
+  }
+
+  Widget _buildFiltroSituacao() {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+    final quantidade = _quantidadePorSituacao;
+    final ativa = _situacaoFiltro;
+
+    return PopupMenuButton<SituacaoFluxo?>(
+      tooltip: 'Filtrar por situação',
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      onSelected: (s) => setState(() => _situacaoFiltro = s),
+      itemBuilder:
+          (context) => [
+            _itemFiltro<SituacaoFluxo?>(
+              valor: null,
+              icone: Icons.clear_all,
+              corIcone: theme.colorScheme.onSurfaceVariant,
+              rotulo: 'Todas as situações',
+            ),
+            if (quantidade.isNotEmpty) const PopupMenuDivider(),
+            for (final entrada in quantidade.entries)
+              _itemFiltro<SituacaoFluxo?>(
+                valor: entrada.key,
+                icone: entrada.key.icone,
+                corIcone: entrada.key.cor(cores),
+                rotulo: entrada.key.rotulo,
+                quantidade: entrada.value,
+              ),
+          ],
+      // Com situação escolhida o quadrado veste a cor dela — o mesmo verde,
+      // vermelho ou âmbar que o selo do card usa.
+      child: _molduraFiltro(
+        icone: ativa?.icone ?? Icons.flag_outlined,
+        ativo: ativa != null,
+        corAtiva: ativa?.cor(cores) ?? cores.info,
+      ),
+    );
+  }
+
+  /// No celular os três filtros moram numa folha, atrás de um quadrado só.
+  ///
+  /// Não é preferência de plataforma: a lupa, o seletor de mês e três quadrados
+  /// não cabem em 360px sem espremer o nome do mês. A folha também é onde cabe
+  /// o rótulo de cada filtro, que no quadrado só existe como tooltip.
+  Widget _buildBotaoFolhaFiltros() {
+    final cores = context.appColors;
+    final ativos = _filtrosAtivos;
+
+    return Tooltip(
+      message: 'Filtros',
+      child: InkWell(
+        onTap: _abrirFolhaFiltros,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _molduraFiltro(
+              icone: Icons.filter_alt_outlined,
+              ativo: ativos > 0,
+              corAtiva: cores.info,
+            ),
+            if (ativos > 0)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: cores.info,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Theme.of(context).cardColor,
+                      width: 2,
+                    ),
+                  ),
+                  child: Text(
+                    '$ativos',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _abrirFolhaFiltros() async {
+    final theme = Theme.of(context);
+    final cores = context.appColors;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder:
+          (contextoFolha) => StatefulBuilder(
+            // Dois `setState`: o da página, que refaz a lista atrás, e o da
+            // folha, que redesenha os próprios seletores.
+            builder: (contextoFolha, refazerFolha) {
+              void aplicar(void Function() mudanca) {
+                setState(mudanca);
+                refazerFolha(() {});
+              }
+
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Filtros', style: theme.textTheme.titleMedium),
+                          const Spacer(),
+                          if (_filtrosAtivos > 0)
+                            TextButton(
+                              onPressed: () {
+                                _limparFiltros();
+                                refazerFolha(() {});
+                              },
+                              child: const Text('Limpar'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      DropdownButtonFormField<int>(
+                        value: _categoriaFiltro,
+                        isDense: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Categoria',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 0,
+                            child: Text('Todas as categorias'),
+                          ),
+                          for (final c in _categoriasDoTipo)
+                            DropdownMenuItem(
+                              value: c.id!,
+                              child: Text(
+                                c.descricao,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged:
+                            (v) => aplicar(() => _categoriaFiltro = v ?? 0),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      DropdownButtonFormField<int?>(
+                        value: _contaFiltro,
+                        isDense: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Conta',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('Todas as contas'),
+                          ),
+                          for (final entrada in _quantidadePorConta.entries
+                              .where((e) => e.key != 0))
+                            DropdownMenuItem(
+                              value: entrada.key,
+                              child: Text(
+                                _contas[entrada.key]?.descricao ??
+                                    'Conta ${entrada.key}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          if (_quantidadePorConta.containsKey(0))
+                            const DropdownMenuItem(
+                              value: 0,
+                              child: Text('Sem conta'),
+                            ),
+                        ],
+                        onChanged: (v) => aplicar(() => _contaFiltro = v),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      DropdownButtonFormField<SituacaoFluxo?>(
+                        value: _situacaoFiltro,
+                        isDense: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          labelText: 'Situação',
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('Todas as situações'),
+                          ),
+                          for (final entrada in _quantidadePorSituacao.entries)
+                            DropdownMenuItem(
+                              value: entrada.key,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    entrada.key.icone,
+                                    size: 16,
+                                    color: entrada.key.cor(cores),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                  Text(entrada.key.rotulo),
+                                ],
+                              ),
+                            ),
+                        ],
+                        onChanged: (v) => aplicar(() => _situacaoFiltro = v),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
     );
   }
 
@@ -1091,10 +1600,7 @@ class _FluxosPageState extends State<FluxosPage> {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.only(
-        top: AppSpacing.md,
-        bottom: AppSpacing.sm,
-      ),
+      padding: const EdgeInsets.only(top: AppSpacing.md, bottom: AppSpacing.sm),
       child: Row(
         children: [
           Icon(
@@ -1121,14 +1627,15 @@ class _FluxosPageState extends State<FluxosPage> {
       fluxo: fluxo,
       categoria: _categorias[fluxo.idCategoria ?? 0],
       subcategoria: _subcategorias[fluxo.idSubcategoria ?? 0],
+      // Resolvida aqui, como a categoria: quem tem o mapa é a página.
+      conta: _contas[fluxo.idConta ?? 0],
       corValor: _tipo.cor(context.appColors),
       rotuloAcao: _tipo.rotuloAcao,
       onEditar: () => _showFormDialog(fluxo: fluxo),
       // O molde do clone é montado aqui, e não dentro do modal: é o model que
       // decide o que não se herda (`FluxoCaixa.paraClone`), e o formulário só
       // precisa saber que vai criar.
-      onDuplicar:
-          () => _showFormDialog(fluxo: fluxo.paraClone(), clonar: true),
+      onDuplicar: () => _showFormDialog(fluxo: fluxo.paraClone(), clonar: true),
       onBaixar: () => _darBaixa(fluxo),
       onEstornar: () => _estornar(fluxo),
       onExcluir: () => _confirmarExclusao(fluxo),

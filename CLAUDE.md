@@ -131,6 +131,47 @@ API os recusa, e não oferecer a replicação quando foi *só* a data que mudou 
 algo que não teria efeito. O modal pergunta no momento de salvar, antes do spinner, e
 `null` do `_perguntarReplicar` é "cancelei a edição", diferente de `false`.
 
+**Dois arranjos por tela, e um número só decide** (`AppLayout.duasColunas`,
+1100px, em `utils/app_tokens.dart`): acima dele as Receitas/Despesas põem o
+formulário **fixo na lateral** (`ApresentacaoFluxo.painel`) e o Resumo se parte
+em duas pilhas; abaixo, as duas voltam à coluna única com modal e botão
+flutuante. O número é compartilhado de propósito — com um limiar por tela haveria
+uma faixa de larguras em que uma já virou duas colunas e a outra não.
+
+No modo painel da lista, três coisas mudam juntas e as três têm o mesmo motivo
+("não há modal"): o botão flutuante some (ele abriria um modal por cima de um
+formulário já aberto), o resumo do mês desce para dentro da coluna da lista (ele
+soma **a lista**, e esticado por baixo do formulário pareceria somar os dois), e
+os três botões do formulário viram dois — "Salvar" já grava e segue, e o lugar
+do "Cancelar" é de "Limpar". Quem decide a vida do painel é a página: a `key`
+dele carrega o alvo em foco e um contador (`_painelGeracao`), e é essa `key` que
+recria o `State` quando o alvo muda — sem ela, os campos da edição anterior
+ficariam lá. Gravar com "continuar" **não** mexe no contador, que é justamente o
+caso em que o formulário tem de sobreviver.
+
+**O card da lista diz quatro coisas, e o lugar de cada uma é decisão**
+(`CardFluxo`): a marca à esquerda é a categoria com um **selo de situação**
+mordendo o canto (antes era a subcategoria), e a linha de baixo é a trilha
+`Categoria › Subcategoria · 05/10` mais o chip da **conta bancária** (antes era
+o status, por extenso). O que se lê de relance numa lista de contas a pagar é se
+a conta está paga, vencida ou por vencer — isso virou cor e ícone no selo, que
+não gasta linha nenhuma; a subcategoria continua escrita na trilha, e a conta,
+que não tinha representação no card, ganhou o espaço que o rótulo de status
+ocupava. Lançamento sem conta não mostra chip: `id_conta = 0` é o padrão de tudo
+que vem do PDV, e "Sem conta" na maioria das linhas seria só ruído.
+
+**Os filtros da lista são três quadrados iguais** (categoria, conta, situação),
+todos locais sobre o mês que já está em memória. A caixa compartilhada é o que
+os faz ler como um grupo, e o que sobra de largura fica com a busca — antes o
+filtro de categoria era uma caixa de 200px com o nome dentro, que comia a busca
+e não tinha irmão com que se alinhar. No celular os três moram numa folha atrás
+de um quadrado só, porque lupa + mês + três quadrados não cabem em 360px.
+O predicado vive em `utils/filtro_fluxos.dart`, fora da página, porque as
+convenções de "vazio" dos quatro filtros **não são iguais**: 0 não filtra em
+categoria (0 é "sem categoria" no app inteiro) mas filtra em conta (0 é o
+recorte "sem conta"), e nulo não filtra em nenhum dos dois.
+`test/filtros_lista_test.dart` trava exatamente isso.
+
 **Duplicar lançamento** (`FluxoCaixa.paraClone` + o `clonar` do `FluxoFormDialog`): o
 modal tem **três** modos, e o par `(fluxo, clonar)` é o que os distingue — `null/false`
 cria, `!null/false` edita, `!null/true` abre preenchido e **cria**. Quem responde isso é

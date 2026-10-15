@@ -248,53 +248,113 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  /// A ordem é a de sempre; o que mudou é que os pedaços do caixa agora são
-  /// condicionais.
+  /// Os blocos do painel, montados uma vez e empilhados conforme a largura.
   ///
-  /// Os dois blocos do caixa não ficam contíguos, e isso é intencional: boletos
-  /// e atalhos continuam entre eles, exatamente onde estavam antes desta tela
-  /// ganhar o segundo resumo. Agrupá-los empurraria o aviso de boleto vencendo
-  /// para baixo de dois gráficos.
+  /// **Numa coluna, a ordem é a de sempre**: caixa, boletos, atalhos, gráficos,
+  /// movimentações. Os dois pedaços do caixa não ficam contíguos de propósito —
+  /// boletos e atalhos continuam entre eles, porque agrupá-los empurraria o
+  /// aviso de boleto vencendo para baixo de dois gráficos.
+  ///
+  /// **Em duas colunas, o que essa regra protege continua protegido**: o boleto
+  /// é o primeiro item da coluna da direita, acima da dobra e sem rolagem. O
+  /// que muda é só que ele deixa de disputar a vertical com o resto. A coluna
+  /// esquerda fica com os dois blocos densos (caixa e movimentações) e a
+  /// direita com os curtos (boleto, atalhos, gráficos), que é o que aproxima as
+  /// duas alturas — e não há como fazê-las iguais, porque cada loja tem uma
+  /// combinação diferente de blocos presentes.
   Widget _buildConteudo(BuildContext context) {
     final espaco = context.responsiveSpacing();
+    final duasColunas =
+        MediaQuery.sizeOf(context).width >= AppLayout.duasColunas;
+
+    final caixa = _caixa == null ? null : _buildMainCard(context, _caixa!);
+    final boletos = _boletos.isEmpty ? null : BoletosWidget(boletos: _boletos);
+    final atalhos = _buildActionCardsRow(context);
+    // Faturamento e pedidos saem do caixa: sem caixa eles seriam dois gráficos
+    // vazios.
+    final graficos =
+        _temCaixa && _relatoriosMensais.isNotEmpty
+            ? MonthlyChartsWidget(relatorios: _relatoriosMensais)
+            : null;
+    final movimentacoes =
+        _temMovimentacoes
+            ? ResumoMovimentacoesWidget(
+              painel: _painel!,
+              categorias: _categorias,
+            )
+            : null;
+
+    // Um bloco que falhou avisa no lugar dele, em vez de sumir — sumir é o que
+    // o painel faz quando a loja de fato não tem o dado, e os dois casos não
+    // podem parecer iguais.
+    final avisos = <Widget>[
+      if (_erroCaixa != null)
+        _buildFalhaBloco('Não foi possível carregar o resumo do caixa.'),
+      if (_erroMovimentacoes != null)
+        _buildFalhaBloco('Não foi possível carregar as movimentações.'),
+      if (!_temCaixa &&
+          !_temMovimentacoes &&
+          _erroCaixa == null &&
+          _erroMovimentacoes == null)
+        _buildSemDados(context),
+    ];
+
+    if (!duasColunas) {
+      return _pilha(espaco, [
+        caixa,
+        boletos,
+        atalhos,
+        graficos,
+        if (movimentacoes != null) ...[
+          // O resumo de movimentações é outro assunto, não o próximo item da
+          // mesma lista: o respiro maior é o que separa os dois.
+          const SizedBox(height: AppSpacing.xl),
+          movimentacoes,
+        ],
+        ...avisos,
+      ]);
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppLayout.conteudoMaximo),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: _pilha(espaco, [caixa, movimentacoes, ...avisos]),
+            ),
+            SizedBox(width: espaco),
+            Expanded(
+              flex: 2,
+              child: _pilha(espaco, [boletos, atalhos, graficos]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Empilha o que existe, com respiro só **entre** os blocos.
+  ///
+  /// Os nulos caem fora aqui, e não em cada chamada: é o que permite montar os
+  /// blocos uma vez e deixar o arranjo decidir a ordem, sem repetir o `if` de
+  /// existência de cada um nas duas composições.
+  Widget _pilha(double espaco, List<Widget?> blocos) {
+    final presentes = blocos.whereType<Widget>().toList();
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_caixa != null) ...[
-          _buildMainCard(context, _caixa!),
-          SizedBox(height: espaco),
-        ],
-        BoletosWidget(boletos: _boletos),
-        if (_boletos.isNotEmpty) SizedBox(height: espaco),
-        _buildActionCardsRow(context),
-        // Faturamento e pedidos saem do caixa: sem caixa eles seriam dois
-        // gráficos vazios.
-        if (_temCaixa && _relatoriosMensais.isNotEmpty) ...[
-          SizedBox(height: espaco),
-          MonthlyChartsWidget(relatorios: _relatoriosMensais),
-        ],
-        if (_temMovimentacoes) ...[
-          SizedBox(height: AppSpacing.xxl),
-          ResumoMovimentacoesWidget(
-            painel: _painel!,
-            categorias: _categorias,
-          ),
-        ],
-        // Um bloco que falhou avisa no lugar dele, em vez de sumir — sumir é o
-        // que o painel faz quando a loja de fato não tem o dado, e os dois
-        // casos não podem parecer iguais.
-        if (_erroCaixa != null) ...[
-          SizedBox(height: espaco),
-          _buildFalhaBloco('Não foi possível carregar o resumo do caixa.'),
-        ],
-        if (_erroMovimentacoes != null) ...[
-          SizedBox(height: espaco),
-          _buildFalhaBloco('Não foi possível carregar as movimentações.'),
-        ],
-        if (!_temCaixa && !_temMovimentacoes && _erroCaixa == null &&
-            _erroMovimentacoes == null) ...[
-          SizedBox(height: espaco),
-          _buildSemDados(context),
+        for (var i = 0; i < presentes.length; i++) ...[
+          // O respiro pula quando um dos dois lados já é um espaçador
+          // explícito — é o caso do corte maior antes das movimentações.
+          if (i > 0 &&
+              presentes[i] is! SizedBox &&
+              presentes[i - 1] is! SizedBox)
+            SizedBox(height: espaco),
+          presentes[i],
         ],
       ],
     );
@@ -355,9 +415,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             Icon(Icons.cloud_off, size: 20, color: cores.warning),
             const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Text(mensagem, style: theme.textTheme.bodySmall),
-            ),
+            Expanded(child: Text(mensagem, style: theme.textTheme.bodySmall)),
             TextButton(
               onPressed: _loadData,
               child: const Text('Tentar de novo'),
@@ -375,10 +433,7 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           Icon(Icons.error_outline, size: 48, color: context.appColors.error),
           const SizedBox(height: AppSpacing.lg),
-          Text(
-            'Erro ao carregar dados:\n$_error',
-            textAlign: TextAlign.center,
-          ),
+          Text('Erro ao carregar dados:\n$_error', textAlign: TextAlign.center),
           const SizedBox(height: AppSpacing.lg),
           ElevatedButton(
             onPressed: _loadData,
@@ -509,11 +564,7 @@ class _DashboardPageState extends State<DashboardPage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.search,
-                color: theme.colorScheme.onSurface,
-                size: 18,
-              ),
+              Icon(Icons.search, color: theme.colorScheme.onSurface, size: 18),
               const SizedBox(width: AppSpacing.sm),
               Text('Detalhes', style: theme.textTheme.titleSmall),
             ],
@@ -539,9 +590,7 @@ class _DashboardPageState extends State<DashboardPage> {
             horizontal: AppSpacing.xxxl - AppSpacing.sm,
             vertical: AppSpacing.sm,
           ),
-          decoration: BoxDecoration(
-            color: cor,
-          ),
+          decoration: BoxDecoration(color: cor),
           child: Padding(
             padding: const EdgeInsets.only(left: 30),
             child: Row(
@@ -649,10 +698,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: AppSpacing.md),
 
-          _buildComparacao(
-            percentMedia,
-            isMedia: true,
-          ),
+          _buildComparacao(percentMedia, isMedia: true),
           const SizedBox(height: AppSpacing.xs),
           _buildComparacao(percentRecord, isMedia: false),
         ],
@@ -666,8 +712,10 @@ class _DashboardPageState extends State<DashboardPage> {
     final positivo = percent >= 0;
     final cor = positivo ? cores.success : cores.error;
     final referencia = isMedia ? 'média' : 'record';
-    final preposicao = isMedia ? (positivo ? 'acima da' : 'abaixo da')
-                               : (positivo ? 'acima do' : 'abaixo do');
+    final preposicao =
+        isMedia
+            ? (positivo ? 'acima da' : 'abaixo da')
+            : (positivo ? 'acima do' : 'abaixo do');
 
     return Row(
       children: [
@@ -690,44 +738,56 @@ class _DashboardPageState extends State<DashboardPage> {
   /// Os atalhos. "Caixas" acompanha o bloco do caixa: sem caixa ele levaria a
   /// uma tela permanentemente vazia, e o menu lateral esconde o item pelo mesmo
   /// motivo. Receitas e Despesas ficam sempre — são o que toda loja usa.
+  /// Caixas, Receitas e Despesas.
+  ///
+  /// Com teto de largura e alinhados à esquerda: esticados por 1900px eles
+  /// viravam três faixas coloridas de 600px cada, que é tamanho de banner, não
+  /// de atalho. O teto também os mantém com a mesma proporção nas duas colunas
+  /// e numa só.
   Widget _buildActionCardsRow(BuildContext context) {
     final theme = Theme.of(context);
     final cores = context.appColors;
 
-    return Row(
-      children: [
-        if (_temCaixa) ...[
-          Expanded(
-            child: _buildActionCard(
-              context,
-              Icons.view_list,
-              '/caixas',
-              'Caixas',
-              theme.colorScheme.primary,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Row(
+          children: [
+            if (_temCaixa) ...[
+              Expanded(
+                child: _buildActionCard(
+                  context,
+                  Icons.view_list,
+                  '/caixas',
+                  'Caixas',
+                  theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+            ],
+            Expanded(
+              child: _buildActionCard(
+                context,
+                Icons.arrow_upward,
+                '/receitas',
+                'Receitas',
+                cores.success,
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-        ],
-        Expanded(
-          child: _buildActionCard(
-            context,
-            Icons.arrow_upward,
-            '/receitas',
-            'Receitas',
-            cores.success,
-          ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: _buildActionCard(
+                context,
+                Icons.arrow_downward,
+                '/despesas',
+                'Despesas',
+                cores.error,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: _buildActionCard(
-            context,
-            Icons.arrow_downward,
-            '/despesas',
-            'Despesas',
-            cores.error,
-          ),
-        ),
-      ],
+      ),
     );
   }
 

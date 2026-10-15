@@ -35,8 +35,33 @@ import 'subcategoria_form_dialog.dart';
 /// `fluxo != null`: a diferença é o que impede o duplicar de virar um UPDATE
 /// silencioso do original, ou de oferecer a replicação para as parcelas de um
 /// lote ao qual o clone não pertence.
+/// Onde o formulário está desenhado.
+///
+/// O conteúdo é o mesmo nos dois; o que muda é a casca, e com ela três coisas:
+/// quem fecha, o que os botões dizem e quanto o formulário mede. Em tela larga
+/// o formulário vive **fixo na lateral** da lista — a tela deixa de ser
+/// "lista + modal por cima" e passa a ser "lista + formulário ao lado", que é o
+/// arranjo de quem lança várias contas seguidas.
+enum ApresentacaoFluxo {
+  /// Sobre a tela, com barreira. O arranjo de celular e tablet.
+  modal,
+
+  /// Encostado na lateral, sempre visível. Sem `Navigator` para fechar: quem
+  /// decide a vida dele é a página, pelo [FluxoFormDialog.onFechar].
+  painel,
+}
+
 class FluxoFormDialog extends StatefulWidget {
   final String tipoFluxo;
+
+  /// Modal (padrão) ou painel lateral.
+  final ApresentacaoFluxo apresentacao;
+
+  /// Pedido de saída. Nulo — o caso do modal — significa "dá o `pop` na rota":
+  /// é o próprio formulário que fecha. No painel não há rota a fechar, então a
+  /// página passa um callback que descarta o que estava em foco e devolve o
+  /// formulário em branco.
+  final VoidCallback? onFechar;
 
   /// O lançamento em foco: a linha sendo editada, ou o molde do clone
   /// (`FluxoCaixa.paraClone()`, que já zerou `id`, `id_ref`, a baixa e o
@@ -64,6 +89,8 @@ class FluxoFormDialog extends StatefulWidget {
     required this.tipoFluxo,
     this.fluxo,
     this.clonar = false,
+    this.apresentacao = ApresentacaoFluxo.modal,
+    this.onFechar,
     required this.onSave,
   });
 
@@ -155,6 +182,9 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
   /// `fluxo` como linha existente (o `UPDATE`, o `id_ref` do lote, a pergunta
   /// de replicar, a repetição travada) pergunta por aqui.
   bool get _ehEdicao => widget.fluxo != null && !widget.clonar;
+
+  /// Desenhado como painel lateral?
+  bool get _ehPainel => widget.apresentacao == ApresentacaoFluxo.painel;
 
   /// "Nova", "Editar" ou "Duplicar", no título do modal.
   ///
@@ -621,9 +651,10 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
         widget.onSave(_dataVencimento ?? DateTime.now(), parcelasReplicadas);
 
         if (!continuar) {
-          // Quem fecha o modal é ele mesmo, e não o `onSave` da tela: só aqui
-          // se sabe se era para fechar.
-          Navigator.of(context).pop();
+          // Quem fecha é o próprio formulário, e não o `onSave` da tela: só
+          // aqui se sabe se era para fechar. No painel não há rota a fechar —
+          // a página descarta o que estava em foco e o devolve em branco.
+          _fechar();
           return;
         }
 
@@ -681,6 +712,17 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
     _descricaoFocus.requestFocus();
   }
 
+  /// Sai do formulário: `pop` no modal, callback da página no painel.
+  void _fechar() {
+    final onFechar = widget.onFechar;
+    if (onFechar != null) {
+      onFechar();
+      return;
+    }
+
+    Navigator.of(context).pop();
+  }
+
   /// Cancelar, "Salvar e continuar" e Salvar — nesta ordem.
   ///
   /// "Salvar e continuar" fica à esquerda do Salvar e sem destaque: a ação
@@ -707,9 +749,27 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       ];
     }
 
+    // No painel o formulário está sempre aberto, e aí os três botões viram
+    // dois: "Salvar" já grava e segue (é o "continuar" do modal, que ali
+    // deixaria de ter sentido como botão separado), e o lugar do "Cancelar" é
+    // de "Limpar" — não há modal a cancelar, há formulário a esvaziar. Editando
+    // pelo painel, limpar é justamente abandonar a edição.
+    if (_ehPainel) {
+      return [
+        TextButton(
+          onPressed: _fechar,
+          child: Text(_ehEdicao ? 'Cancelar edição' : 'Limpar'),
+        ),
+        ElevatedButton(
+          onPressed: () => _salvar(continuar: !_ehEdicao),
+          child: const Text('Salvar'),
+        ),
+      ];
+    }
+
     return [
       TextButton(
-        onPressed: () => Navigator.of(context).pop(),
+        onPressed: _fechar,
         // Depois de gravar com "continuar", não há o que cancelar — o que foi
         // gravado está gravado, e "Cancelar" ali sugeriria desfazer.
         child: Text(_gravados > 0 ? 'Fechar' : 'Cancelar'),
@@ -794,6 +854,8 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    if (_ehPainel) return _buildPainel(context);
+
     final dialogWidth =
         ResponsiveUtils.isMobile(context)
             ? MediaQuery.of(context).size.width * 0.9
@@ -808,92 +870,146 @@ class _FluxoFormDialogState extends State<FluxoFormDialog> {
       contentPadding: context.responsivePadding(),
       content: SizedBox(
         width: dialogWidth,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: _descricaoController,
-                  focusNode: _descricaoFocus,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    labelText: 'Descrição',
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Campo obrigatório';
-                    }
-                    if (value.trim().length < 3) {
-                      return 'Mínimo 3 caracteres';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                TextFormField(
-                  controller: _valorController,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    labelText: 'Valor',
-                    prefixText: 'R\$ ',
-                  ),
-                  // Só dígitos: a vírgula e o ponto são postos pela máscara.
-                  keyboardType: TextInputType.number,
-                  inputFormatters: const [CurrencyInputFormatter()],
-                  onChanged: (_) {
-                    // Realimenta a prévia do valor por parcela.
-                    if (_repeticao != '1') setState(() {});
-                  },
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Campo obrigatório';
-                    }
-                    final numero = CurrencyFormatter.parse(value);
-                    if (numero == null) {
-                      return 'Valor inválido';
-                    }
-                    if (numero <= 0) {
-                      return 'Deve ser maior que zero';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: AppSpacing.md),
-
-                _buildCategoria(),
-                ..._buildSubcategoria(),
-                const SizedBox(height: AppSpacing.md),
-
-                // Conta e vencimento ficam no cabeçalho: são as duas decisões
-                // que o lojista já traz pronta ao abrir o modal, e no corpo
-                // empurravam para baixo o que ele de fato vem preencher.
-                _buildRepeticao(),
-                const SizedBox(height: AppSpacing.md),
-
-                if (_repeticao != '1' && !_ehEdicao)
-                  ..._buildCamposParcelamento(),
-
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  title: const Text('Confirmado'),
-                  value: _confirmado,
-                  onChanged: (value) {
-                    setState(() {
-                      _confirmado = value;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: SingleChildScrollView(child: _buildFormulario()),
       ),
       actions: _buildAcoes(),
+    );
+  }
+
+  /// O formulário encostado na lateral.
+  ///
+  /// Três diferenças em relação ao modal, e nenhuma delas é estética:
+  ///
+  /// - **A largura vem de fora.** Quem a define é a coluna da página
+  ///   (`AppLayout.painelLateral`); forçar aqui os 600px do diálogo faria o
+  ///   formulário vazar da própria coluna.
+  /// - **O cabeçalho e os botões não rolam.** A lista de campos é mais alta que
+  ///   o painel, e perder o "Salvar" ao rolar até o fim seria pior aqui que num
+  ///   modal, que é curto por natureza.
+  /// - **Não tem barreira nem elevação.** Ele é parte da tela, não está sobre
+  ///   ela: o que o separa da lista é a borda da esquerda e a cor da superfície,
+  ///   como qualquer painel de ferramenta.
+  Widget _buildPainel(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
+            child: _buildCabecalho(),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: _buildFormulario(),
+            ),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: OverflowBar(
+              alignment: MainAxisAlignment.end,
+              spacing: AppSpacing.sm,
+              overflowSpacing: AppSpacing.sm,
+              children: _buildAcoes(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Os campos. Compartilhados pelas duas cascas — é o corpo que não muda.
+  Widget _buildFormulario() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextFormField(
+            controller: _descricaoController,
+            focusNode: _descricaoFocus,
+            decoration: const InputDecoration(
+              isDense: true,
+              labelText: 'Descrição',
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Campo obrigatório';
+              }
+              if (value.trim().length < 3) {
+                return 'Mínimo 3 caracteres';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          TextFormField(
+            controller: _valorController,
+            decoration: const InputDecoration(
+              isDense: true,
+              labelText: 'Valor',
+              prefixText: 'R\$ ',
+            ),
+            // Só dígitos: a vírgula e o ponto são postos pela máscara.
+            keyboardType: TextInputType.number,
+            inputFormatters: const [CurrencyInputFormatter()],
+            onChanged: (_) {
+              // Realimenta a prévia do valor por parcela.
+              if (_repeticao != '1') setState(() {});
+            },
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'Campo obrigatório';
+              }
+              final numero = CurrencyFormatter.parse(value);
+              if (numero == null) {
+                return 'Valor inválido';
+              }
+              if (numero <= 0) {
+                return 'Deve ser maior que zero';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          _buildCategoria(),
+          ..._buildSubcategoria(),
+          const SizedBox(height: AppSpacing.md),
+
+          // Conta e vencimento ficam no cabeçalho: são as duas decisões
+          // que o lojista já traz pronta ao abrir o modal, e no corpo
+          // empurravam para baixo o que ele de fato vem preencher.
+          _buildRepeticao(),
+          const SizedBox(height: AppSpacing.md),
+
+          if (_repeticao != '1' && !_ehEdicao) ..._buildCamposParcelamento(),
+
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            title: const Text('Confirmado'),
+            value: _confirmado,
+            onChanged: (value) {
+              setState(() {
+                _confirmado = value;
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 

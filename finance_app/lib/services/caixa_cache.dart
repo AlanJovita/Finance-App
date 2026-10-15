@@ -38,16 +38,27 @@ class CaixaCache {
   /// Falha de rede **não** é guardada: devolve `false` e deixa o cache vazio,
   /// para a tentativa seguinte tentar de novo. O efeito de falhar é o atalho de
   /// Caixas não aparecer nesta abertura do menu — e não um menu travado.
-  Future<bool> obter({bool recarregar = false}) async {
-    if (!recarregar && _temCaixa != null) return _temCaixa!;
+  /// Falha de rede **não** escapa para quem chamou: o pedido que vai para o
+  /// [_emVoo] é o **já tratado**, e não o cru.
+  ///
+  /// A diferença não é estilo. Guardando o pedido cru, o `try` protegia apenas
+  /// o primeiro chamador: o segundo entrava pelo "já tem um em voo", recebia a
+  /// promessa que falha e a exceção estourava do lado dele, sem tratamento. Era
+  /// o que acontecia quando a tela e o modal pediam a lista ao mesmo tempo.
+  Future<bool> obter({bool recarregar = false}) {
+    if (!recarregar && _temCaixa != null) return Future.value(_temCaixa!);
 
-    if (_emVoo != null) return _emVoo!;
+    final emVoo = _emVoo;
+    if (emVoo != null) return emVoo;
 
-    final pedido = _api.getCaixa().then((caixa) => caixa != null);
+    final pedido = _buscar();
     _emVoo = pedido;
+    return pedido;
+  }
 
+  Future<bool> _buscar() async {
     try {
-      final tem = await pedido;
+      final tem = await _api.getCaixa().then((caixa) => caixa != null);
       _temCaixa = tem;
       return tem;
     } catch (_) {
