@@ -8,6 +8,10 @@
 /// use `ResponsiveUtils` (`responsive_utils.dart`), cujos defaults saem daqui.
 library;
 
+// Só pelo `Size` de [AppLayout.menuLateral]. O arquivo é de medidas, e não
+// depende de Material nem de widget nenhum.
+import 'dart:ui' show Size;
+
 abstract final class AppSpacing {
   /// Distância entre um ícone e seu rótulo.
   static const double xs = 4;
@@ -80,30 +84,109 @@ abstract final class AppLayout {
     return 1;
   }
 
-  /// A partir daqui o menu lateral deixa de ser gaveta e fica **fixo** na tela.
+  /// A partir daqui o menu lateral cabe **expandido**, com os rótulos.
   ///
   /// É sobre a largura da tela, e não sobre a que sobra: quem decide se cabe um
-  /// menu permanente é o aparelho. Abaixo disso ele volta a ser a gaveta do
-  /// botão de hambúrguer.
+  /// menu permanente é o aparelho.
   static const double menuFixo = 1500;
 
-  /// Largura do menu quando fixo — o padrão do `Drawer` do Material.
+  /// Largura do menu expandido — o padrão do `Drawer` do Material.
   static const double larguraMenu = 304;
+
+  /// Largura do menu recolhido só aos ícones.
+  ///
+  /// 72 é a medida do `NavigationRail` do Material: cabe o alvo de toque de
+  /// 48px com respiro dos dois lados.
+  static const double larguraMenuColapsado = 72;
 
   /// O divisor entre o menu e o conteúdo.
   static const double _divisorMenu = 1;
 
-  static bool menuLateralFixo(double larguraTela) => larguraTela >= menuFixo;
-
-  /// O que sobra da tela para o conteúdo, já descontado o menu fixo.
+  /// Piso de largura para o menu fixo **recolhido**: o que a segunda coluna
+  /// precisa, mais o que a barra de ícones ocupa. Dá 793.
   ///
-  /// Existe porque o menu fixo nasce exatamente em [menuFixo] = 1500, o mesmo
-  /// número que seria o piso de três colunas: sem descontá-lo, uma tela de
-  /// 1500px montaria três colunas de ~367px — mais estreitas que as duas
-  /// colunas de um celular deitado, que é o cenário mais apertado que existe.
-  static double larguraUtil(double larguraTela) => menuLateralFixo(larguraTela)
-      ? larguraTela - larguraMenu - _divisorMenu
-      : larguraTela;
+  /// É o que permite a barra aparecer bem antes dos 1500px do menu expandido:
+  /// recolhida ela custa 73px, e numa tela de 1366 (notebook comum) ainda
+  /// sobram 1293 — as mesmas duas colunas que haveria sem barra nenhuma.
+  static const double menuFixoColapsado =
+      duasColunas + larguraMenuColapsado + _divisorMenu;
+
+  /// Altura mínima para o menu ficar fixo, recolhido ou não.
+  ///
+  /// A barra tem seis itens de 48px, mais a marca, o tema e o "Sair" — abaixo
+  /// disso ela vira uma lista rolante de ícones, que é pior que o botão de
+  /// hambúrguer. É o que mantém **celular deitado** (≈390 de altura) na gaveta,
+  /// mesmo com os 844px de largura dando de sobra para a barra recolhida.
+  static const double alturaMinimaMenu = 500;
+
+  /// Como o menu se apresenta nesta tela.
+  ///
+  /// [preferenciaColapsado] é a escolha de quem usa (ver `MenuProvider`), e ela
+  /// só é consultada quando as duas formas cabem — abaixo de [menuFixo] a barra
+  /// é recolhida por imposição, não por preferência.
+  static MenuLateral menuLateral(
+    Size tela, {
+    required bool preferenciaColapsado,
+  }) {
+    if (tela.height < alturaMinimaMenu) return MenuLateral.gaveta;
+
+    if (tela.width >= menuFixo) {
+      return preferenciaColapsado
+          ? MenuLateral.recolhido
+          : MenuLateral.expandido;
+    }
+
+    // Aqui só cabe recolhida — expandida, os 304px derrubariam a segunda
+    // coluna, e aí a barra custaria mais do que entrega.
+    if (tela.width >= menuFixoColapsado) return MenuLateral.recolhido;
+
+    return MenuLateral.gaveta;
+  }
+
+  /// A tela comporta as duas formas — é o que decide se o botão de recolher
+  /// aparece.
+  ///
+  /// Repare que **não** se pergunta isto à forma atual: quem recolheu a barra
+  /// num monitor de 1920 está em [MenuLateral.recolhido] e precisa do botão
+  /// justamente para desfazer. Abaixo de [menuFixo] não há botão porque não há
+  /// escolha — expandida ela não cabe.
+  static bool podeAlternarMenu(Size tela) =>
+      tela.height >= alturaMinimaMenu && tela.width >= menuFixo;
+
+  /// Quanto o menu tira da largura da tela, divisor incluído.
+  static double larguraDoMenu(MenuLateral menu) => switch (menu) {
+    MenuLateral.gaveta => 0,
+    MenuLateral.recolhido => larguraMenuColapsado + _divisorMenu,
+    MenuLateral.expandido => larguraMenu + _divisorMenu,
+  };
+
+  /// O que sobra da tela para o conteúdo, já descontado o menu.
+  ///
+  /// Descontar importa porque o menu expandido nasce em [menuFixo] = 1500, o
+  /// mesmo número que é o piso de três colunas: sem a subtração, uma tela de
+  /// 1500px montaria três colunas de ~367px — mais estreitas que as duas de um
+  /// celular deitado, que é o cenário mais apertado que existe.
+  ///
+  /// E é isto que faz recolher o menu valer a pena: os 232px que ele devolve
+  /// são o que cabe a terceira coluna entre 1573 e 1804px de tela.
+  static double larguraUtil(double larguraTela, MenuLateral menu) =>
+      larguraTela - larguraDoMenu(menu);
+}
+
+/// Em que forma o menu lateral está nesta tela — ver [AppLayout.menuLateral].
+enum MenuLateral {
+  /// Atrás do botão de hambúrguer, por cima da tela.
+  gaveta,
+
+  /// Fixo na lateral, só com os ícones.
+  recolhido,
+
+  /// Fixo na lateral, com ícones e rótulos.
+  expandido;
+
+  bool get ehGaveta => this == MenuLateral.gaveta;
+
+  bool get ehFixo => !ehGaveta;
 }
 
 /// Superfícies escuras precisam de mais elevação que as claras para se separarem

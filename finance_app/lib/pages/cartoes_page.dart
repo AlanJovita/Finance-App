@@ -293,14 +293,14 @@ class _CartoesPageState extends State<CartoesPage> {
   @override
   Widget build(BuildContext context) {
     return MolduraMenu(
-      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+      builder: (context, menu) => _buildScaffold(context, menu),
     );
   }
 
-  Widget _buildScaffold(BuildContext context, bool menuFixo) {
+  Widget _buildScaffold(BuildContext context, MenuLateral menu) {
     return Scaffold(
       appBar: AppBar(title: const Text('Cartões de Crédito')),
-      drawer: menuFixo ? null : const AppDrawer(),
+      drawer: menu.ehGaveta ? const AppDrawer() : null,
       floatingActionButton: FloatingActionButton(
         onPressed: _novoCartao,
         tooltip: 'Novo cartão',

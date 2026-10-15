@@ -283,11 +283,11 @@ class _ContasPageState extends State<ContasPage> {
   @override
   Widget build(BuildContext context) {
     return MolduraMenu(
-      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+      builder: (context, menu) => _buildScaffold(context, menu),
     );
   }
 
-  Widget _buildScaffold(BuildContext context, bool menuFixo) {
+  Widget _buildScaffold(BuildContext context, MenuLateral menu) {
     // Transferência exige duas contas ativas; com uma só, o botão não teria para
     // onde mandar o dinheiro.
     final podeTransferir = _contasAtivas.length >= 2;
@@ -304,7 +304,7 @@ class _ContasPageState extends State<ContasPage> {
             ),
         ],
       ),
-      drawer: menuFixo ? null : const AppDrawer(),
+      drawer: menu.ehGaveta ? const AppDrawer() : null,
       floatingActionButton: FloatingActionButton(
         onPressed: _novaConta,
         tooltip: 'Nova conta',

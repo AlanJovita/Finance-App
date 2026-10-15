@@ -206,15 +206,14 @@ class _DashboardPageState extends State<DashboardPage> {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return MolduraMenu(
-      builder: (context, menuFixo) =>
-          _buildScaffold(context, themeProvider, menuFixo),
+      builder: (context, menu) => _buildScaffold(context, themeProvider, menu),
     );
   }
 
   Widget _buildScaffold(
     BuildContext context,
     ThemeProvider themeProvider,
-    bool menuFixo,
+    MenuLateral menu,
   ) {
     return Scaffold(
       appBar: AppBar(
@@ -243,7 +242,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-      drawer: menuFixo ? null : const AppDrawer(),
+      drawer: menu.ehGaveta ? const AppDrawer() : null,
       body: _isLoading
           ? ShimmerWidgets.dashboardFullShimmer(context)
           : _error != null
@@ -253,7 +252,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: context.responsivePadding(),
-                child: _buildConteudo(context),
+                child: _buildConteudo(context, menu),
               ),
             ),
     );
@@ -276,14 +275,16 @@ class _DashboardPageState extends State<DashboardPage> {
   /// caixa continuam não contíguos de propósito — boletos e atalhos ficam entre
   /// eles, porque agrupá-los empurraria o aviso de boleto vencendo para baixo
   /// de dois gráficos.
-  Widget _buildConteudo(BuildContext context) {
+  Widget _buildConteudo(BuildContext context, MenuLateral menu) {
     final espaco = context.responsiveSpacing();
 
-    // O menu fixo come 304px, e nasce exatamente na largura que seria o piso de
-    // três colunas: sem descontá-lo, uma tela de 1500px montaria três colunas
-    // mais estreitas que as duas de um celular deitado.
+    // A conta é sobre o que sobra ao lado do menu, não sobre a tela: expandido
+    // ele come 305px e nasce exatamente na largura que seria o piso de três
+    // colunas — sem descontá-lo, 1500px montaria três colunas mais estreitas
+    // que as duas de um celular deitado. É também o que faz recolher o menu
+    // devolver a terceira coluna entre 1573 e 1804px.
     final colunas = AppLayout.colunasResumo(
-      AppLayout.larguraUtil(MediaQuery.sizeOf(context).width),
+      AppLayout.larguraUtil(MediaQuery.sizeOf(context).width, menu),
     );
     final painel = _painel;
 

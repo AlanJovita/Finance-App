@@ -661,17 +661,17 @@ class _FluxosPageState extends State<FluxosPage> {
   @override
   Widget build(BuildContext context) {
     return MolduraMenu(
-      builder: (context, menuFixo) => _buildScaffold(context, menuFixo),
+      builder: (context, menu) => _buildScaffold(context, menu),
     );
   }
 
-  Widget _buildScaffold(BuildContext context, bool menuFixo) {
+  Widget _buildScaffold(BuildContext context, MenuLateral menu) {
     return Scaffold(
       appBar: AppBar(
         title: Text(_tipo.titulo),
         actions: [_buildBotaoDetalhes()],
       ),
-      drawer: menuFixo ? null : const AppDrawer(),
+      drawer: menu.ehGaveta ? const AppDrawer() : null,
       body: Column(
         children: [
           _buildBarraFiltros(),

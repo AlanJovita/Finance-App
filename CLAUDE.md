@@ -97,34 +97,62 @@ que havia ali, a primeira navegação pelo menu substituía o próprio
 (`utils/auth_actions.dart` e a própria `GuardaSessao`) caía na tela interna em
 vez da tela de login.
 
-**O menu tem duas formas, e `AppLayout.menuFixo` (1500px) decide qual**
-(`widgets/moldura_menu.dart`): gaveta abaixo disso, encostado na lateral acima.
-Quatro coisas aí não se leem no código.
+**O menu tem três formas** (`MenuLateral`, resolvida por `AppLayout.menuLateral`
+e aplicada pela `widgets/moldura_menu.dart`): `gaveta` atrás do hambúrguer,
+`recolhido` como barra fixa só de ícones, e `expandido` como barra fixa com os
+rótulos. Seis coisas aí não se leem no código.
 
-**Fixo, o `Navigator.pop` que fechava a gaveta acerta a rota.** É a armadilha da
+**A regra é uma só: a barra fica fixa sempre que couber sem derrubar a segunda
+coluna do Resumo.** Expandida ela custa 305px e por isso só entra a partir de
+1500; recolhida custa 73 e já entra a partir de 793 (`menuFixoColapsado` =
+`duasColunas + 73`), o que inclui praticamente todo notebook. Entre 793 e 1499 a
+barra é recolhida **por imposição**, e o botão de expandir não aparece —
+`podeAlternarMenu` responde pela tela, nunca pela forma atual, senão quem
+recolheu num monitor de 1920 ficaria sem o botão para desfazer.
+
+**Altura também decide.** `alturaMinimaMenu` (500) é o que mantém **celular
+deitado** na gaveta: 844px de largura dariam de sobra para a barra recolhida,
+mas os seis destinos mais o tema e o "Sair" não cabem em 390px de altura, e a
+barra viraria uma lista rolante de ícones — pior que o hambúrguer.
+
+**Fixa, o `Navigator.pop` que fechava a gaveta acerta a rota.** É a armadilha da
 feature: `AppDrawer` dá um `pop` antes de navegar — para fechar a gaveta — e sem
-gaveta esse `pop` derruba a tela em foco. Daí o `AppDrawer.fixo`, que é o que o
-`_fecharGaveta` consulta; vale para o item do menu **e** para o botão "Sair".
-`test/menu_fixo_test.dart` trava os dois caminhos.
+gaveta esse `pop` derruba a tela em foco. Daí o `_fecharGaveta` consultar
+`forma.ehFixo`; vale para o item do menu **e** para o botão "Sair".
+`test/menu_fixo_test.dart` trava os dois caminhos, nas duas formas fixas.
 
 **A moldura embrulha a tela inteira, `AppBar` incluída.** Posta dentro do
 `body`, ela deixaria o menu abaixo da barra de título e, nas Receitas/Despesas,
 a barra de totais do rodapé (`bottomNavigationBar`) correria por baixo dele —
-somando a lista debaixo do menu.
+somando a lista debaixo do menu. E **fixa, a tela não declara `drawer:`**: por
+isso o `builder` devolve a forma; declarar os dois deixaria o hambúrguer na
+barra, abrindo uma segunda cópia do menu por cima da primeira.
 
-**Fixo, a tela não declara `drawer:`.** Por isso o `builder` devolve `menuFixo`:
-declarar os dois deixaria o botão de hambúrguer na barra, abrindo uma segunda
-cópia do menu por cima da primeira.
+**Recolher é preferência de quem usa, não estado de tela** (`MenuProvider`, no
+molde do `ThemeProvider`). Precisa ser global: a `MolduraMenu` é montada por
+cada página, então estado local faria a barra reexpandir a cada navegação.
+Persiste no `SharedPreferences` pelo mesmo motivo do tema. Recolhida, **nada
+some** do menu — os seis destinos, o tema e o "Sair" continuam lá como ícone, e
+o que era rótulo vira `Tooltip`.
 
-**O menu fixo desconta da conta de colunas do Resumo** (`AppLayout.larguraUtil`).
-Ele nasce em 1500px, exatamente o número que é o piso de três colunas: sem
-descontar os 304px dele, uma tela de 1500 montaria três colunas de ~367px — mais
-estreitas que as **duas** de um celular deitado, que é o cenário mais apertado
-que existe. Com o desconto, as três colunas voltam a partir de 1805px de tela.
+**A forma entra na conta de colunas do Resumo** (`AppLayout.larguraUtil`). A
+barra expandida nasce em 1500px, exatamente o número que é o piso de três
+colunas: sem descontar os 305px dela, uma tela de 1500 montaria três colunas de
+~367px — mais estreitas que as **duas** de um celular deitado, que é o cenário
+mais apertado que existe. É também o que faz recolher valer a pena: os 232px
+devolvidos são o que cabe a terceira coluna entre 1573 e 1804px de tela.
 
 Só as cinco telas de menu usam a moldura. As de detalhe empilhadas por cima
 (`CaixaPage`, `CartaoMovimentosPage`) continuam sem menu: elas já não tinham
 gaveta, e se sai delas pelo botão de voltar.
+
+Duas armadilhas de **teste** que isso criou, as duas em
+`lista_fluxos_golden_test.dart`: a página agora monta o `AppDrawer`, então o
+arnês precisa do `MenuProvider` **e** do `ThemeProvider` (e do mock do
+`SharedPreferences`); e o logo da barra é um `Image.asset`, que resolve de forma
+assíncrona — sem o `_resolverImagens` antes do `expectLater`, o golden grava ora
+o PNG, ora o ícone do `errorBuilder`, conforme um teste anterior do arquivo já
+ter carregado o asset.
 
 `test/sessao_test.dart` trava o conjunto: a rota interna aberta por
 recarregamento não monta nem por um frame, a sessão lembrada monta a tela com a
@@ -384,9 +412,9 @@ em 720 e 1500px sobre a largura **da tela**). Três decisões moram aí:
   estreitada continua paisagem. Os limiares foram escolhidos para dar o mesmo resultado nos
   aparelhos (celular em pé ≈390 → 1; deitado ≈844 → 2) com a consequência aceita de que
   tablet **em pé** (≈800) também ganha duas.
-- **A largura é a que sobra depois do menu fixo**, não a da tela: ver
-  `AppLayout.larguraUtil` e a seção do menu lateral. Na prática as três colunas começam em
-  1805px de tela, e não em 1500.
+- **A largura é a que sobra depois do menu lateral**, não a da tela: ver
+  `AppLayout.larguraUtil` e a seção do menu. Na prática, com o menu expandido as três
+  colunas começam em 1805px de tela; recolhendo o menu elas já cabem em 1573.
 - **Todo card é peça solta.** Não existem mais "bloco do caixa" e "bloco de movimentações"
   como unidades de layout: os dois gráficos mensais (`CartaoGraficoMensal`, um por
   `GraficoMensal`) e os cinco cards de movimentações (`CartaoSaldos`, `CartaoNatureza` ×2,
