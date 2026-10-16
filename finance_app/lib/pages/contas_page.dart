@@ -138,6 +138,11 @@ class _ContasPageState extends State<ContasPage> {
   double get _totalPrevisto =>
       _saldos.fold(0.0, (soma, c) => soma + c.saldoPrevisto);
 
+  /// Quanto do previsto é fatura de cartão ainda aberta. Já está descontado em
+  /// [_totalPrevisto] — isto só alimenta o aviso de origem.
+  double get _totalFaturaAberta =>
+      _saldos.fold(0.0, (soma, c) => soma + c.faturaAberta);
+
   // ---------------------------------------------------------------- ações
 
   Future<void> _novaConta() async {
@@ -527,6 +532,32 @@ class _ContasPageState extends State<ContasPage> {
                 ),
               ],
             ),
+            // O previsto já desconta a fatura em aberto, que não tem lançamento
+            // nenhum atrás dela — sem este aviso o número não se explica.
+            if (_totalFaturaAberta > 0) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Row(
+                children: [
+                  Icon(
+                    Icons.credit_card,
+                    size: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  Expanded(
+                    child: Text(
+                      'Inclui '
+                      '${CurrencyFormatter.format(_totalFaturaAberta)} '
+                      'de fatura de cartão ainda aberta, que muda a cada '
+                      'lançamento até o fechamento.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -609,6 +640,33 @@ class _ContasPageState extends State<ContasPage> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // Linha própria, e não junto do banco e da contagem acima:
+                  // aquela linha é de uma só, e o valor seria o primeiro a ser
+                  // cortado no celular. Só aparece na conta que paga cartão.
+                  if (conta.temFaturaAberta) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.credit_card,
+                          size: 12,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Flexible(
+                          child: Text(
+                            '${CurrencyFormatter.format(conta.faturaAberta)} '
+                            'em fatura aberta',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

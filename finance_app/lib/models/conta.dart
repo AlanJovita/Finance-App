@@ -84,6 +84,9 @@ class Conta {
 /// `saldoAtual` é saldo inicial + o que está confirmado, `saldoPrevisto` soma
 /// também o que ainda vai vencer. Saldo de conta que reinicia na virada do mês
 /// não é saldo.
+///
+/// A fatura de cartão **em aberto** já está descontada do `saldoPrevisto`, na
+/// conta de pagamento do cartão — ver [faturaAberta].
 class SaldoConta {
   final int id;
   final String descricao;
@@ -95,7 +98,19 @@ class SaldoConta {
 
   /// Quantos lançamentos entraram na conta — alimenta o aviso do delete, que
   /// precisa dizer quantas movimentações serão movidas.
+  ///
+  /// **Não conta a fatura de cartão em aberto**: ela não é lançamento, e a lista
+  /// da conta não tem o que mostrar por ela.
   final int quantidade;
+
+  /// Quanto do [saldoPrevisto] é fatura de cartão ainda **aberta**, já
+  /// descontado. Legenda, não dado — a tela não soma nada.
+  ///
+  /// Existe porque esse valor não tem lançamento nenhum atrás dele: enquanto a
+  /// fatura está aberta não há linha em `finance_fluxo_caixa`, e sem o aviso o
+  /// lojista procuraria na conta um débito que não está lá. Depois do fechamento
+  /// ela vira lançamento comum e sai daqui.
+  final double faturaAberta;
 
   const SaldoConta({
     required this.id,
@@ -106,6 +121,7 @@ class SaldoConta {
     required this.saldoAtual,
     required this.saldoPrevisto,
     required this.quantidade,
+    this.faturaAberta = 0.0,
   });
 
   factory SaldoConta.fromJson(Map<String, dynamic> json) => SaldoConta(
@@ -117,6 +133,9 @@ class SaldoConta {
     saldoAtual: _double(json['saldo_atual']),
     saldoPrevisto: _double(json['saldo_previsto']),
     quantidade: _int(json['quantidade']),
+    // Ausente é API anterior ao cartão no saldo: o saldo continua certo (a
+    // conta é no servidor) e o que falta é só o aviso de origem.
+    faturaAberta: _double(json['fatura_aberta']),
   );
 
   /// A linha do que foi lançado sem conta atribuída. Não é uma conta: não se
@@ -125,6 +144,9 @@ class SaldoConta {
 
   /// O que ainda não foi confirmado e já está contado no previsto.
   double get aConfirmar => saldoPrevisto - saldoAtual;
+
+  /// Esta conta paga alguma fatura que ainda está aberta.
+  bool get temFaturaAberta => faturaAberta > 0;
 }
 
 /// Uma transferência entre contas, já pareada pelo servidor

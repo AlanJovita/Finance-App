@@ -206,6 +206,15 @@ autenticam nada, então as duas pontas precisam da guarda.
 
 The account list is read from `ContasCache`, loaded once per session, **not** from `ApiService` directly. The lançamento modal already fires two requests per opening (categorias + subcategorias); the account list changes far less and a third request per opening buys nothing. `AuthProvider.logout` clears the cache — it is a per-store list. The cache deliberately does not store failures, and `ContaFormDialog`/`ContasPage` invalidate it after every write. One subtlety in `_loadContas`: an **archived** account stays in the dropdown when it is the one this lançamento already uses, otherwise editing an old entry would silently drop its account on save.
 
+**A fatura de cartão em aberto pesa no saldo previsto da conta que paga o cartão**, e vem
+já descontada do servidor — `SaldoConta.faturaAberta` é **legenda, não dado**: a tela não
+soma nada. Dois avisos saem dela, um no total da página e um no card da conta, e eles não
+são enfeite: enquanto a fatura está aberta não existe lançamento nenhum atrás daquele valor
+(ver o CLAUDE.md da API), então sem o aviso o lojista procuraria na conta um débito que não
+está lá. Nunca mexe no `saldoAtual` — fatura aberta não tem baixa — e não entra em
+`quantidade`, pela mesma razão. Depois do fechamento a despesa é lançamento comum, conta
+pelo caminho de sempre e o aviso desaparece.
+
 Bank logos are a local asset catalog (`lib/utils/bancos.dart`), keyed by COMPE code, and the database stores only that key (`finance_conta.imagem`) — the same shape as `categoria_visuais.dart`. There is no reliable public logo API (BrasilAPI returns names and codes, not logos; Clearbit's was discontinued in late 2024), and in Flutter Web a third-party image depends on someone else's CORS. `LogoBanco` falls back to the brand colour plus the account's initials through `errorBuilder`, so **the feature works with no PNG present at all** — dropping files into `assets/images/bancos/` is additive and needs no code change. Transferências do not appear in Receitas/Despesas on purpose (see the API's CLAUDE.md); the Contas page is where they are listed and deleted.
 
 **Parcelamento** (`id_ref`): duas operações em `lib/pages/fluxos_page.dart` e
@@ -369,9 +378,13 @@ mostrar a prévia no cabeçalho enquanto o lojista escolhe a data. O POST **não
 errada — não um lançamento na fatura errada.
 
 **O cadastro não pergunta a categoria da fatura, e a coluna não existe.** A despesa gerada
-no fechamento nasce sem categoria, como todo lançamento do app, e quem quiser categorizá-la
-o faz na própria despesa em Despesas — `finance_cartao` não tem `id_categoria` (ver o
-comentário no lugar dela em `migration_cartao_credito.sql`) e `FecharFatura` grava 0.
+no fechamento nasce sem categoria, como todo lançamento do app — `finance_cartao` não tem
+`id_categoria` (ver o comentário no lugar dela em `migration_cartao_credito.sql`) e
+`FecharFatura` grava 0. **Onde categorizar é no movimento do cartão, não na despesa da
+fatura**: é a categoria da compra que alimenta o gráfico de Despesas por categoria do
+Resumo (ver a seção dos gráficos do painel), e a da própria despesa da fatura não produz
+mais fatia nenhuma. A edição em lote desta tela é o caminho para categorizar o mês todo de
+uma vez.
 
 `Cartao.idCategoria` **ainda existe no model Dart**, e é resíduo: o `toJson` manda a chave,
 a API a ignora, e o `fromJson` lê 0 porque a resposta não a traz. Nada quebra — é só código
@@ -552,6 +565,40 @@ card de saldos ao lado (fim do previsto = `receitas_previsto`; fim do realizado 
 `receitas_realizado`); se não fecharem, uma das duas está somando outra coisa. O realizado
 **para em hoje** em vez de seguir reto até o fim do mês: a linha chapada afirmaria "nada
 mais entrou" onde o certo é "ainda não aconteceu".
+
+**O cartão de crédito entra nesses gráficos, e quem o soma é o servidor.** O
+`ResumoPainel` chega com a fatura já dentro do resumo, da série diária, de
+atraso/pendente e das fatias de despesa — nenhum card daqui soma nada. O bloco
+`cartao` (`CartaoNoPainel`) existe só como **legenda**: `total` é quanto do mês é
+cartão e `projetado` é a parte que não existe como lançamento. Três coisas aí não
+se leem no código.
+
+**A fatura aberta não é um lançamento, e é por isso que a legenda existe.**
+Enquanto a fatura está aberta não há linha em `finance_fluxo_caixa` — o valor é
+projetado na leitura (ver o CLAUDE.md da API). Sem a frase do `CartaoSaldos`, o
+lojista veria a despesa no saldo do mês e iria procurá-la na lista de Despesas,
+onde ela não está. Depois do fechamento ela é lançamento comum e está lá, e a
+segunda frase ("em fatura ainda aberta") desaparece — é o `projetado > 0` que a
+condiciona.
+
+**"Despesas por categoria" passou a decompor a fatura pelas compras.** A despesa
+da fatura não produz mais fatia própria: no lugar dela entram as categorias dos
+movimentos do cartão, o que faz o gráfico responder em que o dinheiro foi gasto
+em vez de "R$ 4.300 em Fatura Nubank". A consequência: **categorizar a despesa da
+fatura em Despesas não tem mais efeito no gráfico** — quem categoriza o gasto do
+cartão é o movimento do cartão, e a edição em lote da tela de movimentos existe
+para isso. A frase no pé do card avisa, porque sem ela o total da pizza não
+parece fechar com o que a lista de Despesas soma.
+
+**"Receitas por categoria" não recebe nada do cartão**, e a ausência é decisão:
+estorno e cashback são créditos que abatem a fatura, não dinheiro entrando na
+loja. Eles reduzem a fatia da categoria em que caíram — é o que mantém a soma das
+fatias fechando com o total do mês.
+
+Repare que `resumo.quantidade` **não** conta a fatura projetada (ela não é
+lançamento), e por isso `ResumoPainel.vazio` ganhou o `cartao.temGasto`: sem ele,
+quem só usa cartão apareceria como loja sem movimentação e o bloco inteiro
+sumiria do Resumo.
 
 `CategoriasPieChart` desenha **no máximo 5 fatias nomeadas** e agrega o resto em "Outras":
 acima disso as vizinhas ficam com poucos graus, e a cor vem do cadastro — duas categorias

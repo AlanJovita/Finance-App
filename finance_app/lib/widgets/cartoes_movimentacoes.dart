@@ -139,8 +139,55 @@ class CartaoSaldos extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          if (painel.cartao.temGasto) ...[
+            const SizedBox(height: AppSpacing.xs),
+            _origemCartao(context),
+          ],
         ],
       ),
+    );
+  }
+
+  /// De onde vem a parte do mês que é cartão.
+  ///
+  /// Não é enfeite: a fatura **aberta** não existe como lançamento, e sem esta
+  /// linha o lojista vê o valor no saldo do mês e vai procurá-lo na lista de
+  /// Despesas, onde não está. A segunda frase só aparece quando há fatura aberta
+  /// — depois do fechamento a despesa é um lançamento comum e está lá.
+  Widget _origemCartao(BuildContext context) {
+    final theme = Theme.of(context);
+    final cartao = painel.cartao;
+
+    final texto = StringBuffer(
+      'Inclui ${CurrencyFormatter.format(cartao.total)} de cartão de '
+      'crédito, no vencimento de cada fatura.',
+    );
+
+    if (cartao.projetado > 0) {
+      texto.write(
+        ' ${CurrencyFormatter.format(cartao.projetado)} em fatura ainda '
+        'aberta, que muda a cada lançamento até o fechamento.',
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.credit_card,
+          size: 12,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Expanded(
+          child: Text(
+            texto.toString(),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -391,6 +438,16 @@ class CartaoNatureza extends StatelessWidget {
 }
 
 /// A pizza por categoria de uma natureza. Um card por natureza.
+///
+/// **As fatias de despesa incluem o cartão de crédito, pela categoria de cada
+/// compra** — não pela categoria da despesa da fatura, que deixou de produzir
+/// fatia (ver `_totalPorCategoria` na API). É o que faz "Despesas por categoria"
+/// responder em que o dinheiro foi gasto, e não "R$ 4.300 em Fatura Nubank".
+///
+/// O cartão **não** entra em Receitas por categoria, e a ausência é decisão:
+/// estorno e cashback são créditos que abatem a fatura, não dinheiro entrando
+/// na loja. Eles reduzem a fatia da categoria em que caíram, que é o que mantém
+/// a soma das fatias fechando com o total do mês.
 class CartaoCategorias extends StatelessWidget {
   const CartaoCategorias({
     super.key,
@@ -425,6 +482,18 @@ class CartaoCategorias extends StatelessWidget {
                     : painel.categoriasDespesa,
             categorias: categorias,
           ),
+          // Só na pizza de despesas, e só quando há cartão no mês: é lá que a
+          // compra do cartão entra, e a frase explica por que o total daqui não
+          // é o que a lista de Despesas soma.
+          if (!ehReceita && painel.cartao.temGasto) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Inclui as compras do cartão, pela categoria de cada compra.',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ],
       ),
     );
