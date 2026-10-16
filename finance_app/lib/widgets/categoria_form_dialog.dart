@@ -9,15 +9,29 @@ import '../utils/categoria_visuais.dart';
 import '../utils/responsive_utils.dart';
 import 'seletor_cor_icone.dart';
 
-/// Dialog para criar nova categoria.
+/// Dialog para criar ou editar uma categoria.
 ///
-/// Devolve o id da categoria criada no `pop`, para quem abriu já deixá-la
-/// selecionada. `tipo_fluxo` e `id_cliente` não aparecem no formulário: saem do
-/// tipo da movimentação e da loja logada.
+/// **Dois modos, e o que os distingue é [categoria].** Nulo cria; não nulo
+/// edita. Criando, devolve o id no `pop`, para quem abriu já deixá-la
+/// selecionada; editando, devolve `true` — o chamador recarrega a lista e não
+/// tem o que selecionar.
+///
+/// `tipo_fluxo` e `id_cliente` não aparecem no formulário: saem do tipo da
+/// movimentação e da loja logada. **E `tipo_fluxo` não é editável nem em
+/// edição**, apesar de ir no corpo do PUT: trocar a natureza de uma categoria
+/// jogaria todos os lançamentos dela para o outro lado do mês, somando no sinal
+/// errado, sem nada na tela sugerindo que foi isso que aconteceu.
 class CategoriaFormDialog extends StatefulWidget {
   final int tipoFluxo;
 
-  const CategoriaFormDialog({super.key, required this.tipoFluxo});
+  /// A categoria a editar, ou nulo para criar.
+  final Categoria? categoria;
+
+  const CategoriaFormDialog({
+    super.key,
+    required this.tipoFluxo,
+    this.categoria,
+  });
 
   @override
   State<CategoriaFormDialog> createState() => _CategoriaFormDialogState();
@@ -30,9 +44,27 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
   final LoggerService _logger = LoggerService();
   bool _isLoading = false;
 
-  String _cor = CategoriaVisuais.paleta.first.hex;
+  late String _cor;
   String? _icone;
-  bool _destaque = true;
+  late bool _destaque;
+
+  /// Quem responde pelo modo é isto, nunca `widget.categoria != null` espalhado
+  /// pelo arquivo — é a mesma disciplina do `_ehEdicao` do `FluxoFormDialog`.
+  bool get _ehEdicao => widget.categoria != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final atual = widget.categoria;
+
+    _cor = atual?.cor ?? CategoriaVisuais.paleta.first.hex;
+    _icone = atual?.icone;
+    // Categoria nova nasce em destaque; editando, o valor é o que está gravado.
+    _destaque = atual?.destaque ?? true;
+
+    if (atual != null) _descricaoController.text = atual.descricao;
+  }
 
   @override
   void dispose() {
@@ -63,38 +95,42 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final novaCategoria = Categoria(
+      final atual = widget.categoria;
+
+      final categoria = Categoria(
+        id: atual?.id,
         idLoja: GlobalState().firstIdLoja,
         descricao: _descricaoController.text.trim(),
-        ativado: true,
-        tipoFluxo: widget.tipoFluxo,
+        // Em edição o `ativado` gravado é preservado: o formulário não oferece
+        // arquivar, e mandar `true` por reflexo reativaria uma categoria que o
+        // lojista tinha tirado do seletor.
+        ativado: atual?.ativado ?? true,
+        // Da categoria em edição, nunca do `widget.tipoFluxo` — ver a doc da
+        // classe. Em criação os dois são o mesmo valor.
+        tipoFluxo: atual?.tipoFluxo ?? widget.tipoFluxo,
         destaque: _destaque,
         icone: _icone,
         cor: _cor,
       );
 
+      if (_ehEdicao) {
+        await _apiService.updateCategoria(categoria);
+
+        if (!mounted) return;
+        _showOk('Categoria atualizada!');
+        Navigator.of(context).pop(true);
+        return;
+      }
+
       // Falha agora vem como exceção, com a mensagem da API. O que chega aqui
       // foi criado: `null` só significa que o endpoint não devolveu o id.
       final novoId =
-          await _apiService.createCategoria(novaCategoria) ??
-          await _idPelaDescricao(novaCategoria);
+          await _apiService.createCategoria(categoria) ??
+          await _idPelaDescricao(categoria);
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(child: Text('Categoria criada com sucesso!')),
-            ],
-          ),
-          backgroundColor: context.appColors.success,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      _showOk('Categoria criada com sucesso!');
 
       // 0 avisa quem abriu que a categoria existe mas não dá para
       // pré-selecioná-la — diferente de fechar sem valor, que é cancelamento.
@@ -104,12 +140,33 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
         'CategoriaFormDialog._salvar',
         e,
         stackTrace: s,
-        additionalInfo: {'tipoFluxo': widget.tipoFluxo},
+        additionalInfo: {
+          'tipoFluxo': widget.tipoFluxo,
+          'edicao': _ehEdicao,
+          'id': widget.categoria?.id,
+        },
       );
       if (mounted) _showError(_mensagemDeErro(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showOk(String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: Text(mensagem)),
+          ],
+        ),
+        backgroundColor: context.appColors.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   /// A API confirmou a criação sem devolver o id. Relê a lista e procura a
@@ -148,7 +205,7 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
     final texto = e.toString();
 
     if (texto.contains('FormatException') || texto.contains('not valid JSON')) {
-      return 'Erro no servidor: o endpoint de criação de categoria pode não estar '
+      return 'Erro no servidor: o endpoint de categoria pode não estar '
           'implementado na API. Verifique com o desenvolvedor backend.';
     }
     if (texto.contains('SocketException')) {
@@ -157,7 +214,9 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
     if (texto.contains('TimeoutException')) {
       return 'Tempo esgotado: o servidor demorou muito para responder';
     }
-    return 'Erro ao criar categoria: $texto';
+    return _ehEdicao
+        ? 'Erro ao editar categoria: $texto'
+        : 'Erro ao criar categoria: $texto';
   }
 
   @override
@@ -172,7 +231,7 @@ class _CategoriaFormDialogState extends State<CategoriaFormDialog> {
     final cor = CategoriaVisuais.cor(_cor);
 
     return AlertDialog(
-      title: const Text('Nova Categoria'),
+      title: Text(_ehEdicao ? 'Editar Categoria' : 'Nova Categoria'),
       contentPadding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,

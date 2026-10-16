@@ -109,6 +109,15 @@ class AppDrawer extends StatelessWidget {
                   route: '/despesas',
                   iconColor: context.appColors.error,
                 ),
+                // Depois de Receitas e Despesas de propósito: Categorias é a
+                // tela de **cadastro** das duas, e um item de gestão acima dos
+                // destinos do dia a dia inverteria a ordem de uso.
+                _buildMenuItem(
+                  context,
+                  icon: Icons.sell_outlined,
+                  title: 'Categorias',
+                  route: '/categorias',
+                ),
                 Divider(
                   height: AppSpacing.xxl,
                   indent: _recolhido ? AppSpacing.md : AppSpacing.lg,

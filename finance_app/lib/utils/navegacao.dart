@@ -17,9 +17,41 @@ import 'package:flutter/material.dart';
 /// prende quem desloga na tela de login.
 ///
 /// Tocar o destino em que já se está não faz nada — sem o atalho, o menu
-/// recriaria a tela e refaria as requisições dela.
-void irParaDestino(BuildContext context, String rota) {
-  if (ModalRoute.of(context)?.settings.name == rota) return;
+/// recriaria a tela e refaria as requisições dela. **Com [argumentos] isso não
+/// vale**: quem manda um filtro quer a tela remontada com ele, mesmo estando
+/// nela (é o caso de pular de uma categoria para outra).
+void irParaDestino(BuildContext context, String rota, {Object? argumentos}) {
+  if (argumentos == null && ModalRoute.of(context)?.settings.name == rota) {
+    return;
+  }
 
-  Navigator.pushNamedAndRemoveUntil(context, rota, (r) => r.isFirst);
+  Navigator.pushNamedAndRemoveUntil(
+    context,
+    rota,
+    (r) => r.isFirst,
+    arguments: argumentos,
+  );
+}
+
+/// Com que recorte a tela de Receitas/Despesas deve abrir.
+///
+/// Vai como `arguments` da rota, e quem o lê é a própria `FluxosPage` pelo
+/// `ModalRoute.of(context).settings.arguments` — as telas são construídas dentro
+/// do mapa `routes` do `main.dart`, que não vê os argumentos.
+///
+/// Existe porque o filtro de categoria da lista é **estado local** dela: a
+/// página de Categorias precisava de um jeito de dizer "abra em outubro, só
+/// Mercado" sem que a lista expusesse um setter para fora.
+///
+/// Nulo em qualquer campo é "não filtre": abrir pelo menu lateral não manda
+/// argumento nenhum e a tela nasce no mês corrente, sem filtro.
+class FiltroInicialFluxos {
+  /// O mês em que a lista abre. Só ano e mês importam.
+  final DateTime? mes;
+
+  /// A categoria a filtrar. **0 não filtra** — é "sem categoria" no app inteiro,
+  /// e a tela não oferece esse recorte (ver `fluxoPassaNoFiltro`).
+  final int? idCategoria;
+
+  const FiltroInicialFluxos({this.mes, this.idCategoria});
 }

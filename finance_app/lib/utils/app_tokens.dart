@@ -84,6 +84,22 @@ abstract final class AppLayout {
     return 1;
   }
 
+  /// Em [largura] cabem as duas tabelas da página de Categorias, lado a lado.
+  ///
+  /// Reusa o limiar do Resumo de propósito: o pedido era "em formato horizontal,
+  /// duas colunas", e o limiar de 720 é justamente o que separa celular deitado
+  /// (≈844) de celular em pé (≈390). **Largura, não orientação** — no navegador
+  /// "orientação" não diz nada sobre quanto espaço existe, e uma janela
+  /// estreitada continua paisagem.
+  ///
+  /// Como no Resumo, [largura] é a que sobra depois do menu lateral fixo
+  /// ([larguraUtil]): a barra expandida come 305px, e sem descontá-la uma tela
+  /// de 800 montaria duas tabelas de ~250px cada.
+  ///
+  /// Abaixo do limiar a lista de subcategorias não desaparece — ela passa a
+  /// abrir pelo menu de três pontos da categoria.
+  static bool duasTabelasCategorias(double largura) => largura >= duasColunas;
+
   /// A partir daqui o menu lateral cabe **expandido**, com os rótulos.
   ///
   /// É sobre a largura da tela, e não sobre a que sobra: quem decide se cabe um
@@ -113,11 +129,17 @@ abstract final class AppLayout {
 
   /// Altura mínima para o menu ficar fixo, recolhido ou não.
   ///
-  /// A barra tem seis itens de 48px, mais a marca, o tema e o "Sair" — abaixo
-  /// disso ela vira uma lista rolante de ícones, que é pior que o botão de
-  /// hambúrguer. É o que mantém **celular deitado** (≈390 de altura) na gaveta,
-  /// mesmo com os 844px de largura dando de sobra para a barra recolhida.
-  static const double alturaMinimaMenu = 500;
+  /// A barra tem **sete** itens de 48px, mais a marca, o tema e o "Sair" —
+  /// abaixo disso ela vira uma lista rolante de ícones, que é pior que o botão
+  /// de hambúrguer. É o que mantém **celular deitado** (≈390 de altura) na
+  /// gaveta, mesmo com os 844px de largura dando de sobra para a barra
+  /// recolhida.
+  ///
+  /// Eram 500 com seis destinos; Categorias é o sétimo, e o valor subiu os 48px
+  /// de um item. **Esta constante acompanha a contagem do `AppDrawer`**: item
+  /// novo no menu sem subir o piso aqui devolve a barra rolante numa faixa
+  /// estreita de alturas, que é o caso que ninguém testa.
+  static const double alturaMinimaMenu = 548;
 
   /// Como o menu se apresenta nesta tela.
   ///

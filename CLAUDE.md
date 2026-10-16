@@ -40,7 +40,7 @@ Every log line carries `id_software = 10` (`idSoftwareFinance`) and `versao = ve
 
 The finance-api sends to the same place, via `Util/log_api.py` there. Deserialization (`fromJson`) deliberately does **not** log remotely: it runs once per item, so a malformed list would emit one line per record — `ApiService` already logs the whole request once, with endpoint and body.
 
-**Routing and token login** (`lib/main.dart`): named routes exist for `/login`, `/dashboard`, `/caixas`, `/contas`, `/cartoes`, `/receitas`, `/despesas`. Any *other* non-root path is treated as a login token: `onGenerateRoute` hands it to `TokenLoginWrapper`, which repassa o token a `AuthProvider.loginByToken` → `POST /finance/login/token`. O token é **opaco** (`secrets.token_urlsafe(32)`, ~43 chars): quem valida é a API, e o app não decodifica nada dele — ver `TokenService`, que só confere o formato para não gastar requisição com caminho que claramente não é token. Keep this in mind when adding routes — a new named route must be added to the known-routes check in `onGenerateRoute`, to the `routes` map, **and embrulhada na `GuardaSessao`** (seção seguinte), ou ela será interpretada como token — ou, pior, abrirá sem sessão.
+**Routing and token login** (`lib/main.dart`): named routes exist for `/login`, `/dashboard`, `/caixas`, `/contas`, `/cartoes`, `/categorias`, `/receitas`, `/despesas`. Any *other* non-root path is treated as a login token: `onGenerateRoute` hands it to `TokenLoginWrapper`, which repassa o token a `AuthProvider.loginByToken` → `POST /finance/login/token`. O token é **opaco** (`secrets.token_urlsafe(32)`, ~43 chars): quem valida é a API, e o app não decodifica nada dele — ver `TokenService`, que só confere o formato para não gastar requisição com caminho que claramente não é token. Keep this in mind when adding routes — a new named route must be added to the known-routes check in `onGenerateRoute`, to the `routes` map, **and embrulhada na `GuardaSessao`** (seção seguinte), ou ela será interpretada como token — ou, pior, abrirá sem sessão.
 
 **A rota vem do caminho da URL, e isso depende de duas peças.** `main()` chama
 `usePathUrlStrategy()`: o padrão do Flutter Web é `HashUrlStrategy`, que lê a
@@ -104,7 +104,7 @@ primeiro, porque ele é sempre a sessão mais recente. Chave corrompida ou com i
 todas as vezes. Credencial nunca entra em nenhum dos dois (nem senha, nem o
 token do link).
 
-**Os seis destinos do menu são irmãos de topo** (`utils/navegacao.dart`).
+**Os sete destinos do menu são irmãos de topo** (`utils/navegacao.dart`).
 Chegar em Receitas pelo menu lateral, pelo atalho do Resumo ou pelo "ver todos"
 de um card do painel tem de deixar a pilha igual: `[raiz, destino]`. Antes cada
 caminho fazia a sua própria chamada — o menu dava `pushNamedAndRemoveUntil`, os
@@ -113,7 +113,7 @@ outros dois davam `pushNamed` — e a profundidade dependia do caminho percorrid
 para uma dessas rotas é bug.
 
 **Por isso essas telas não têm seta de voltar**: `automaticallyImplyLeading:
-menu.ehGaveta` nas cinco. Com a barra lateral à vista a seta não tem para onde
+menu.ehGaveta` nas seis. Com a barra lateral à vista a seta não tem para onde
 levar — abaixo só existe a raiz, que mostra o mesmo Resumo. No modo gaveta o
 valor é `true`, mas a seta continua não aparecendo: o `AppBar` desenha o botão
 da gaveta, que tem precedência. As telas de **detalhe** (`CaixaPage`,
@@ -150,7 +150,7 @@ recolheu num monitor de 1920 ficaria sem o botão para desfazer.
 
 **Altura também decide.** `alturaMinimaMenu` (500) é o que mantém **celular
 deitado** na gaveta: 844px de largura dariam de sobra para a barra recolhida,
-mas os seis destinos mais o tema e o "Sair" não cabem em 390px de altura, e a
+mas os sete destinos mais o tema e o "Sair" não cabem em 390px de altura, e a
 barra viraria uma lista rolante de ícones — pior que o hambúrguer.
 
 **Fixa, o `Navigator.pop` que fechava a gaveta acerta a rota.** É a armadilha da
@@ -170,7 +170,7 @@ barra, abrindo uma segunda cópia do menu por cima da primeira.
 molde do `ThemeProvider`). Precisa ser global: a `MolduraMenu` é montada por
 cada página, então estado local faria a barra reexpandir a cada navegação.
 Persiste no `SharedPreferences` pelo mesmo motivo do tema. Recolhida, **nada
-some** do menu — os seis destinos, o tema e o "Sair" continuam lá como ícone, e
+some** do menu — os sete destinos, o tema e o "Sair" continuam lá como ícone, e
 o que era rótulo vira `Tooltip`.
 
 **A forma entra na conta de colunas do Resumo** (`AppLayout.larguraUtil`). A
@@ -180,7 +180,7 @@ colunas: sem descontar os 305px dela, uma tela de 1500 montaria três colunas de
 mais apertado que existe. É também o que faz recolher valer a pena: os 232px
 devolvidos são o que cabe a terceira coluna entre 1573 e 1804px de tela.
 
-Só as cinco telas de menu usam a moldura. As de detalhe empilhadas por cima
+Só as seis telas de menu usam a moldura. As de detalhe empilhadas por cima
 (`CaixaPage`, `CartaoMovimentosPage`) continuam sem menu: elas já não tinham
 gaveta, e se sai delas pelo botão de voltar.
 
@@ -199,6 +199,70 @@ loja (e nunca com 0), a sessão da aba sobrevive a um `AuthProvider` novo, o
 sessão encerrada. Do outro lado, a finance-api passou a recusar `id_cliente = 0`
 na URL e nas escritas (ver o CLAUDE.md dela) — as rotas do financeiro não
 autenticam nada, então as duas pontas precisam da guarda.
+
+**Categorias** (`lib/pages/categorias_page.dart` + `widgets/tabela_categorias.dart`):
+a sétima tela do menu, e a de **gestão** do cadastro — até ela existir, categoria
+só se criava de dentro do modal de lançamento, e editar ou excluir não existia em
+lugar nenhum. Seis coisas ali não se leem no código.
+
+**O total de cada linha inclui as compras do cartão**, pela categoria de cada
+compra e atribuídas ao vencimento da fatura. É de propósito: é o mesmo número do
+gráfico "Despesas por categoria" do Resumo, e a mesma categoria no mesmo mês não
+pode mostrar um valor numa tela e outro na outra. **A consequência foi aceita
+explicitamente:** a lista que o "Ver lançamentos" abre soma *menos* que o total da
+linha quando há cartão naquela categoria — ela só tem `finance_fluxo_caixa`. A
+alternativa discutida era devolver a parte do cartão à parte para a tela
+destacá-la; ficou decidido mostrar só o total somado.
+
+**Duas colunas são decididas por largura, nunca por orientação**
+(`AppLayout.duasTabelasCategorias`, que reusa o limiar de 720 da grade do Resumo
+sobre a `larguraUtil`). O pedido original era "em formato horizontal, duas
+colunas", mas no navegador "orientação" não diz nada sobre quanto espaço existe —
+uma janela estreitada continua paisagem. É a mesma decisão da `GradeCartoes`, e
+divergir aqui faria duas telas responderem diferente à mesma pergunta.
+
+**O toque na linha faz coisas diferentes nas duas larguras, e isso é a decisão
+central.** Em duas colunas ele **seleciona** a categoria e a coluna da direita
+acompanha; numa coluna ele **navega** para Receitas/Despesas. Não é
+inconsistência: numa coluna não existe painel à direita para receber a seleção,
+então não há duas coisas que o toque possa significar. O caminho que falta em
+cada largura entra no menu de três pontos — "Ver lançamentos" em duas colunas,
+"Subcategorias" (numa folha) em uma.
+
+**Excluir é cascata, e o modal diz as duas consequências**, porque as duas
+surpreendem: os lançamentos **não** são apagados (passam a "sem categoria") e as
+subcategorias filhas **são**. Sem a primeira frase, quem lê "excluir categoria"
+desiste com medo de perder histórico; sem a segunda, perde as filhas sem saber.
+Quem zera os órfãos é a API, nas **quatro** colunas (`id_categoria` e
+`id_subcategoria`, em `finance_fluxo_caixa` e em `finance_cartao_movimento`) —
+ver o CLAUDE.md de lá.
+
+**Trocar de aba não recarrega nada**: receita e despesa saem da mesma resposta
+(`tipo_fluxo` separa as duas), então a aba é filtro em memória. A única carga por
+aba é o atalho de meses, que a API devolve por natureza e fica em cache por tipo.
+A **seleção**, por outro lado, é limpa na troca: manter "Mercado" (receita)
+selecionado ao ir para Despesas mostraria as subcategorias de uma categoria que
+não está na lista à vista.
+
+**O filtro chega pela rota, não por um setter.** `irParaDestino` ganhou
+`argumentos`, e `FiltroInicialFluxos` (`utils/navegacao.dart`) é o que a
+`FluxosPage` lê — em `didChangeDependencies`, não no `initState`:
+`ModalRoute.of(context)` é busca de `InheritedWidget` e não é permitida lá. Ler
+ali também não custa requisição a mais, porque roda antes do primeiro build.
+Repare que **com argumento o atalho de "já estou nesta rota" não vale**: quem
+manda um filtro quer a tela remontada com ele, e é isso que faz pular de uma
+categoria para outra funcionar.
+
+**O seletor de mês virou widget** (`widgets/navegador_mes.dart`), usado pela
+`FluxosPage` e por esta. Não foi extract gratuito: o rótulo do meio não é texto, é
+um menu com os meses que têm lançamento, e uma segunda implementação divergiria
+na largura fixa do rótulo e no item sentinela que impede o `showMenu` de quebrar
+num assert quando não há mês nenhum.
+
+**`AppLayout.alturaMinimaMenu` acompanha a contagem de itens do menu**: eram 500
+com seis destinos, são 548 com sete. Item novo sem subir o piso devolve a barra
+lateral rolante numa faixa estreita de alturas — o caso que ninguém testa.
+`test/categorias_page_test.dart` trava o conjunto.
 
 **Conta bancária** (`lib/pages/contas_page.dart`): three things there are not inferable from the code.
 

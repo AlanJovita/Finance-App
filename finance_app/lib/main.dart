@@ -10,6 +10,7 @@ import 'pages/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/lista_caixas_page.dart';
 import 'pages/cartoes_page.dart';
+import 'pages/categorias_page.dart';
 import 'pages/contas_page.dart';
 import 'pages/fluxos_page.dart';
 import 'utils/app_theme.dart';
@@ -88,6 +89,7 @@ class MyApp extends StatelessWidget {
                     token == 'caixas' ||
                     token == 'contas' ||
                     token == 'cartoes' ||
+                    token == 'categorias' ||
                     token == 'receitas' ||
                     token == 'despesas') {
                   return null; // Deixa as rotas normais funcionarem
@@ -133,6 +135,11 @@ class MyApp extends StatelessWidget {
                   (context) => const GuardaSessao(
                     rota: '/cartoes',
                     child: CartoesPage(),
+                  ),
+              '/categorias':
+                  (context) => const GuardaSessao(
+                    rota: '/categorias',
+                    child: CategoriasPage(),
                   ),
               '/receitas':
                   (context) => const GuardaSessao(

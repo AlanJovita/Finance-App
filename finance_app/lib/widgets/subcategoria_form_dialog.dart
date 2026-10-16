@@ -8,21 +8,30 @@ import '../utils/categoria_visuais.dart';
 import '../utils/responsive_utils.dart';
 import 'seletor_cor_icone.dart';
 
-/// Dialog para criar nova subcategoria.
+/// Dialog para criar ou editar uma subcategoria.
 ///
-/// Devolve o id criado no `pop`. Não tem campo de cor: a subcategoria herda a
-/// da categoria pai a 70% de opacidade — daí [corCategoria], que só serve para
-/// pintar a prévia dos ícones aqui dentro.
+/// **Dois modos, e o que os distingue é [subcategoria].** Nulo cria e devolve o
+/// id no `pop`; não nulo edita e devolve `true`.
+///
+/// **Não tem campo de cor, e a ausência é decisão**: a subcategoria herda a cor
+/// da categoria pai a 70% de opacidade, e é isso que a faz ler como variação
+/// dele no seletor, na trilha do card e nas fatias do gráfico. Daí
+/// [corCategoria], que só serve para pintar a prévia dos ícones aqui dentro —
+/// `finance_subcategoria` não tem coluna de cor.
 class SubcategoriaFormDialog extends StatefulWidget {
   final int idCategoria;
   final String nomeCategoria;
   final Color corCategoria;
+
+  /// A subcategoria a editar, ou nulo para criar.
+  final Subcategoria? subcategoria;
 
   const SubcategoriaFormDialog({
     super.key,
     required this.idCategoria,
     required this.nomeCategoria,
     required this.corCategoria,
+    this.subcategoria,
   });
 
   @override
@@ -37,7 +46,21 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
   bool _isLoading = false;
 
   String? _icone;
-  bool _destaque = true;
+  late bool _destaque;
+
+  bool get _ehEdicao => widget.subcategoria != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final atual = widget.subcategoria;
+
+    _icone = atual?.icone;
+    _destaque = atual?.destaque ?? true;
+
+    if (atual != null) _descricaoController.text = atual.descricao;
+  }
 
   @override
   void dispose() {
@@ -68,36 +91,40 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
     setState(() => _isLoading = true);
 
     try {
-      final nova = Subcategoria(
-        idCategoria: widget.idCategoria,
+      final atual = widget.subcategoria;
+
+      final subcategoria = Subcategoria(
+        id: atual?.id,
+        // Da subcategoria em edição: mover de categoria não é o que este modal
+        // faz, e trocar o pai levaria a filha para outra natureza.
+        idCategoria: atual?.idCategoria ?? widget.idCategoria,
         descricao: _descricaoController.text.trim(),
-        ativado: true,
+        // Preservado em edição, pelo mesmo motivo da categoria: o formulário
+        // não oferece arquivar, e `true` por reflexo reativaria o que o lojista
+        // tinha tirado do seletor.
+        ativado: atual?.ativado ?? true,
         destaque: _destaque,
         icone: _icone,
       );
 
+      if (_ehEdicao) {
+        await _apiService.updateSubcategoria(subcategoria);
+
+        if (!mounted) return;
+        _showOk('Subcategoria atualizada!');
+        Navigator.of(context).pop(true);
+        return;
+      }
+
       // Falha agora vem como exceção, com a mensagem da API. O que chega aqui
       // foi criado: `null` só significa que o endpoint não devolveu o id.
       final novoId =
-          await _apiService.createSubcategoria(nova) ??
-          await _idPelaDescricao(nova);
+          await _apiService.createSubcategoria(subcategoria) ??
+          await _idPelaDescricao(subcategoria);
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.white),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(child: Text('Subcategoria criada com sucesso!')),
-            ],
-          ),
-          backgroundColor: context.appColors.success,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      _showOk('Subcategoria criada com sucesso!');
 
       // 0 avisa quem abriu que a subcategoria existe mas não dá para
       // pré-selecioná-la — diferente de fechar sem valor, que é cancelamento.
@@ -107,12 +134,39 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
         'SubcategoriaFormDialog._salvar',
         e,
         stackTrace: s,
-        additionalInfo: {'idCategoria': widget.idCategoria},
+        additionalInfo: {
+          'idCategoria': widget.idCategoria,
+          'edicao': _ehEdicao,
+          'id': widget.subcategoria?.id,
+        },
       );
-      if (mounted) _showError('Erro ao criar subcategoria: $e');
+      if (mounted) {
+        _showError(
+          _ehEdicao
+              ? 'Erro ao editar subcategoria: $e'
+              : 'Erro ao criar subcategoria: $e',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showOk(String mensagem) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: Text(mensagem)),
+          ],
+        ),
+        backgroundColor: context.appColors.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   /// A API confirmou a criação sem devolver o id. Relê a lista e procura a
@@ -161,7 +215,7 @@ class _SubcategoriaFormDialogState extends State<SubcategoriaFormDialog> {
     );
 
     return AlertDialog(
-      title: const Text('Nova Subcategoria'),
+      title: Text(_ehEdicao ? 'Editar Subcategoria' : 'Nova Subcategoria'),
       contentPadding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,

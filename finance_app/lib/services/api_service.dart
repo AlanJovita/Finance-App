@@ -11,6 +11,7 @@ import '../models/relatorio_mensal.dart';
 import '../models/relatorio_semanal.dart';
 import '../models/resumo_fluxo.dart';
 import '../models/resumo_painel.dart';
+import '../models/totais_categoria.dart';
 import '../models/boleto.dart';
 import 'api_config.dart';
 import 'global_state.dart';
@@ -561,6 +562,109 @@ class ApiService {
     }
   }
 
+  /// Renomeia, troca cor, ícone e destaque de uma categoria existente.
+  ///
+  /// `tipo_fluxo` vai no corpo e a API o reescreve na linha, mas o formulário de
+  /// edição **não** o oferece: trocar a natureza de uma categoria deixaria os
+  /// lançamentos dela do outro lado do mês, somando no sinal errado.
+  Future<void> updateCategoria(Categoria categoria) async {
+    try {
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/categoria'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(_comCliente(categoria.toJson())),
+        ),
+        'updateCategoria',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao editar categoria.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateCategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'categoria': categoria.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga a categoria, as subcategorias filhas e zera quem apontava.
+  ///
+  /// **Não é só um DELETE.** A API zera `id_categoria` e `id_subcategoria` em
+  /// `finance_fluxo_caixa` **e** em `finance_cartao_movimento`, e apaga as
+  /// filhas, tudo numa transação — sem isso os lançamentos ficariam apontando
+  /// para um id que não existe mais. Ver `FinanceBLL.RemoveCategoria`.
+  ///
+  /// Categoria que já não existe responde sucesso, não erro: a rota é
+  /// idempotente de propósito (é uma das que o PDV reenvia).
+  Future<void> deleteCategoria(int id) async {
+    try {
+      final idLoja = _idCliente;
+
+      final response = await _handleRequest(
+        () => http.delete(
+          Uri.parse('$_baseUrl/finance/categoria/$id/$idLoja'),
+        ),
+        'deleteCategoria',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao excluir categoria.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteCategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id},
+      );
+      rethrow;
+    }
+  }
+
+  /// Quanto cada categoria e subcategoria movimentou no mês.
+  ///
+  /// Uma requisição para as duas tabelas da página de Categorias, e o total já
+  /// **com** as compras do cartão — o mesmo número do gráfico do Resumo. Ver
+  /// [TotaisCategorias].
+  Future<TotaisCategorias> getTotaisCategorias({DateTime? mes}) async {
+    try {
+      final idLoja = _idCliente;
+
+      // `?mes=YYYY-MM` — o dia não entra: o mês é a identidade do recorte, e um
+      // dia na query string só convidaria a mandar dias diferentes para o mesmo
+      // mês. Ausente, o servidor resolve o mês corrente de Brasília.
+      final query = mes == null
+          ? ''
+          : '?mes=${mes.year.toString().padLeft(4, '0')}-'
+              '${mes.month.toString().padLeft(2, '0')}';
+
+      final response = await _handleRequest(
+        () => http.get(
+          Uri.parse('$_baseUrl/finance/categoria/totais/$idLoja$query'),
+        ),
+        'getTotaisCategorias',
+      );
+
+      if (response['success'] == true && response['data'] is Map) {
+        return TotaisCategorias.fromJson(
+          response['data'] as Map<String, dynamic>,
+        );
+      }
+      throw Exception(response['msg'] ?? 'Erro ao carregar os totais.');
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.getTotaisCategorias',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'mes': mes?.toIso8601String()},
+      );
+      rethrow;
+    }
+  }
+
   /// O id do INSERT vem em `data: [{id: N}]`. Uma API mais antiga responde
   /// `data: []` — aí o registro foi criado, mas não dá para selecioná-lo.
   int? _idCriado(Map<String, dynamic> response) {
@@ -627,6 +731,72 @@ class ApiService {
         e,
         stackTrace: stackTrace,
         additionalInfo: {'subcategoria': subcategoria.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Renomeia, troca o ícone e o destaque de uma subcategoria.
+  ///
+  /// **`id_cliente` vai no corpo, e é obrigatório.** `Subcategoria.toJson()` não
+  /// o tem — a tabela não tem a coluna, a loja é a da categoria pai —, então
+  /// `_comCliente` não teria chave para reescrever e ele é posto à mão. Sem ele
+  /// a API recusa: até esta tela existir, `PUT /subcategoria` era a última
+  /// escrita do financeiro sem escopo de loja.
+  ///
+  /// Não há cor aqui: a subcategoria herda a da categoria pai a 70% de
+  /// opacidade, que é o que a faz ler como variação dele.
+  Future<void> updateSubcategoria(Subcategoria subcategoria) async {
+    try {
+      final body = subcategoria.toJson();
+      body['id_cliente'] = _idCliente;
+
+      final response = await _handleRequest(
+        () => http.put(
+          Uri.parse('$_baseUrl/finance/subcategoria'),
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(body),
+        ),
+        'updateSubcategoria',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao editar subcategoria.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.updateSubcategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'subcategoria': subcategoria.toJson()},
+      );
+      rethrow;
+    }
+  }
+
+  /// Apaga a subcategoria e zera `id_subcategoria` em quem apontava.
+  ///
+  /// São duas tabelas (caixa e cartão) — ver `FinanceBLL.RemoveSubcategoria`. A
+  /// loja vai **na URL**: a forma sem ela continua registrada na API só para
+  /// recusar com a URL nova na mensagem.
+  Future<void> deleteSubcategoria(int id) async {
+    try {
+      final idLoja = _idCliente;
+
+      final response = await _handleRequest(
+        () => http.delete(
+          Uri.parse('$_baseUrl/finance/subcategoria/$id/$idLoja'),
+        ),
+        'deleteSubcategoria',
+      );
+      if (response['success'] != true) {
+        throw Exception(response['msg'] ?? 'Erro ao excluir subcategoria.');
+      }
+    } catch (e, stackTrace) {
+      await _logger.logError(
+        'ApiService.deleteSubcategoria',
+        e,
+        stackTrace: stackTrace,
+        additionalInfo: {'id': id},
       );
       rethrow;
     }

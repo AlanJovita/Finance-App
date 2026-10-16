@@ -15,6 +15,7 @@ import '../utils/categoria_visuais.dart';
 import '../utils/currency_formatter.dart';
 import '../utils/filtro_fluxos.dart';
 import '../utils/meses.dart';
+import '../utils/navegacao.dart';
 import '../utils/responsive_utils.dart';
 import '../utils/situacao_fluxo.dart';
 import '../widgets/app_drawer.dart';
@@ -24,6 +25,7 @@ import '../widgets/detalhes_mes_dialog.dart';
 import '../models/edicao_lote.dart';
 import '../widgets/edicao_lote_dialog.dart';
 import '../widgets/fluxo_form_dialog.dart';
+import '../widgets/navegador_mes.dart';
 import '../widgets/pagamento_dialog.dart';
 import '../widgets/shimmer_widgets.dart';
 
@@ -174,11 +176,43 @@ class _FluxosPageState extends State<FluxosPage> {
   /// categoria, que fica uma linha abaixo dele.
   static const double _alturaControle = 40;
 
+  /// A primeira carga já aconteceu. `didChangeDependencies` roda mais de uma
+  /// vez (troca de tema, de tamanho de tela), e sem isto a tela recarregaria do
+  /// zero a cada uma.
+  bool _iniciado = false;
+
   @override
   void initState() {
     super.initState();
     final agora = DateTime.now();
     _mes = DateTime(agora.year, agora.month);
+  }
+
+  /// **A carga inicial mora aqui, e não no `initState`, por causa do filtro.**
+  ///
+  /// Quem abre a tela pela página de Categorias manda um [FiltroInicialFluxos]
+  /// como argumento da rota, e lê-lo exige `ModalRoute.of(context)` — que é uma
+  /// busca de `InheritedWidget` e não é permitida no `initState`. Ler aqui também
+  /// não custa requisição a mais: `didChangeDependencies` roda **antes** do
+  /// primeiro build, então a carga sai já com o mês certo, em vez de buscar o
+  /// mês corrente e logo depois o pedido.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_iniciado) return;
+    _iniciado = true;
+
+    final filtro = ModalRoute.of(context)?.settings.arguments;
+
+    if (filtro is FiltroInicialFluxos) {
+      final mes = filtro.mes;
+      if (mes != null) _mes = DateTime(mes.year, mes.month);
+
+      // 0 não filtra — é "sem categoria" no app inteiro, e a tela não oferece
+      // esse recorte (ver `fluxoPassaNoFiltro`).
+      _categoriaFiltro = filtro.idCategoria ?? 0;
+    }
 
     _carregarResumoMeses();
     _carregarCategorias();
@@ -977,117 +1011,14 @@ class _FluxosPageState extends State<FluxosPage> {
     });
   }
 
+  /// O seletor de mês mora em `widgets/navegador_mes.dart` desde que a página
+  /// de Categorias passou a usar o mesmo controle — ver a doc de lá.
   Widget _buildNavegadorMes({double larguraRotulo = 150}) {
-    final theme = Theme.of(context);
-    final agora = DateTime.now();
-    final noMesAtual = _mes.year == agora.year && _mes.month == agora.month;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left),
-          tooltip: 'Mês anterior',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _irParaMes(DateTime(_mes.year, _mes.month - 1)),
-        ),
-        // Largura fixa: sem ela o botão seguinte dança de lugar conforme o
-        // nome do mês encolhe ou cresce.
-        SizedBox(
-          width: larguraRotulo,
-          child: _buildAtalhoMeses(theme, noMesAtual),
-        ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right),
-          tooltip: 'Próximo mês',
-          visualDensity: VisualDensity.compact,
-          onPressed: () => _irParaMes(DateTime(_mes.year, _mes.month + 1)),
-        ),
-      ],
-    );
-  }
-
-  /// O rótulo do mês é também um menu: lista os meses em que a loja tem
-  /// lançamento, para não obrigar a clicar na seta doze vezes até achar.
-  Widget _buildAtalhoMeses(ThemeData theme, bool noMesAtual) {
-    final comLancamento = _meses.where((m) => !m.semData).toList();
-
-    return PopupMenuButton<String>(
-      tooltip: 'Escolher mês',
-      position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      onSelected: (chave) {
-        final partes = chave.split('-');
-        _irParaMes(DateTime(int.parse(partes[0]), int.parse(partes[1])));
-      },
-      itemBuilder: (context) {
-        final agora = DateTime.now();
-        final itens = <PopupMenuEntry<String>>[
-          if (!noMesAtual)
-            PopupMenuItem(
-              value: _chave(DateTime(agora.year, agora.month)),
-              child: const Row(
-                children: [
-                  Icon(Icons.today, size: 16),
-                  SizedBox(width: AppSpacing.sm),
-                  Text('Mês atual'),
-                ],
-              ),
-            ),
-          if (!noMesAtual && comLancamento.isNotEmpty) const PopupMenuDivider(),
-          for (final m in comLancamento)
-            PopupMenuItem(
-              value: m.chave,
-              child: Row(
-                children: [
-                  Expanded(child: Text(_rotuloMes(DateTime(m.ano!, m.mes!)))),
-                  const SizedBox(width: AppSpacing.md),
-                  Text(
-                    '${m.quantidade}',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ];
-
-        // Loja sem nenhum lançamento, parada no mês atual: as duas listas acima
-        // ficam vazias e o `showMenu` do Material quebra num assert se abrir
-        // sem item nenhum.
-        if (itens.isEmpty) {
-          itens.add(
-            PopupMenuItem(
-              enabled: false,
-              child: Text(
-                'Nenhum mês com lançamento',
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          );
-        }
-
-        return itens;
-      },
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                _rotuloMes(_mes),
-                style: theme.textTheme.titleSmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const Icon(Icons.arrow_drop_down, size: 18),
-          ],
-        ),
-      ),
+    return NavegadorMes(
+      mes: _mes,
+      meses: _meses,
+      larguraRotulo: larguraRotulo,
+      onMudarMes: _irParaMes,
     );
   }
 
